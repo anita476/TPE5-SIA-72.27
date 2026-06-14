@@ -21,24 +21,27 @@ class SimpleAutoencoder(Autoencoder):
 
         return self.a[-1]
 
-    def backward(self, y_true, lr):
-        m = y_true.shape[0]
+    def _compute_grads(self, y_true):
+        """Backprop, returns (dW_list, db_list) without touching weights."""
         dW_list = [None] * len(self.weights)
         db_list = [None] * len(self.biases)
 
-        # Start delta at the output layer (sigmoid + MSE)
+        # Output layer: sigmoid + MSE combined gradient
         delta = mse_grad(self.a[-1], y_true) * sigmoid_grad(self.z[-1])
 
         for i in reversed(range(len(self.weights))):
-            dW_list[i] = self.a[i].T @ delta / m
+            dW_list[i] = self.a[i].T @ delta / y_true.shape[0]
             db_list[i] = np.mean(delta, axis=0, keepdims=True)
 
             if i > 0:
                 delta = (delta @ self.weights[i].T) * self.act_grad(self.z[i - 1])
 
-        for i in range(len(self.weights)):
-            self.weights[i] -= lr * dW_list[i]
-            self.biases[i]  -= lr * db_list[i]
+        return dW_list, db_list
+
+    def backward(self, y_true, lr):
+        """SGD backward pass (kept for compatibility)."""
+        dW_list, db_list = self._compute_grads(y_true)
+        self._apply_sgd(dW_list, db_list, lr)
 
     def encode(self, x):
         a = x
@@ -53,5 +56,3 @@ class SimpleAutoencoder(Autoencoder):
             a = sigmoid(a @ self.weights[i] + self.biases[i]) if is_last \
                 else self.act(a @ self.weights[i] + self.biases[i])
         return a
-
-
