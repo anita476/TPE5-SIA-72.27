@@ -1,5 +1,6 @@
 import json
 import os
+import itertools
 from typing import Any
 
 
@@ -9,10 +10,8 @@ AUTOENCODER_REGISTRY: dict[str, tuple[str, str]] = {
     "simple": ("autoencoders.SimpleAutoencoder", "SimpleAutoencoder"),
 }
 
-
 def load_config(config_path: str) -> dict[str, Any]:
-    """Load and validate a JSON config file for the autoencoder pipeline.
-
+    """Load and validate a JSON config file for the autoencoder pipeline
     Raises
     ------
     FileNotFoundError
@@ -27,11 +26,22 @@ def load_config(config_path: str) -> dict[str, Any]:
         try:
             cfg: dict[str, Any] = json.load(fh)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in config file {config_path!r}: {exc}") from exc
+            raise ValueError(
+                f"Invalid JSON in config file {config_path!r}: {exc}"
+            ) from exc
 
+    # normalise top-level keys to lower-case.
     cfg = {k.lower(): v for k, v in cfg.items()}
 
-    missing = REQUIRED_KEYS - cfg.keys()
+    # normalise grid keys if present.
+    if "grid" in cfg and isinstance(cfg["grid"], dict):
+        cfg["grid"] = {k.lower(): v for k, v in cfg["grid"].items()}
+
+    grid_keys = set(cfg.get("grid", {}).keys())
+    flat_keys = cfg.keys() - {"grid"}
+    all_keys  = flat_keys | grid_keys
+
+    missing = REQUIRED_KEYS - all_keys
     if missing:
         raise ValueError(
             f"Config file {config_path!r} is missing required key(s): "
@@ -41,14 +51,49 @@ def load_config(config_path: str) -> dict[str, Any]:
     return cfg
 
 
+def expand_grid(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand a config that may contain a ``"grid"`` section into a flat list
+    of fully-resolved parameter dictionaries, one per combination.
+
+    The ``"grid"`` key (if present) must be a mapping whose values are lists
+    of candidate values.  Every other top-level key is treated as a fixed
+    scalar copied into every combination unchanged.
+
+    If there is no ``"grid"`` key — or the grid is empty — the function
+    returns a single-element list containing the config itself (with the
+    ``"grid"`` key removed), so callers can always iterate unconditionally.
+
+    """
+    grid: dict[str, list] = cfg.get("grid", {})
+
+    # Base config: everything except the "grid" key itself.
+    base = {k: v for k, v in cfg.items() if k != "grid"}
+
+    if not grid:
+        return [base]
+
+    # Validate that every grid value is a list.
+    bad = [k for k, v in grid.items() if not isinstance(v, list)]
+    if bad:
+        raise ValueError(
+            f"Each grid value must be a list. Non-list grid key(s): {bad}"
+        )
+
+    grid_keys   = list(grid.keys())
+    grid_values = [grid[k] for k in grid_keys]
+
+    combinations: list[dict[str, Any]] = []
+    for combo_values in itertools.product(*grid_values):
+        entry = dict(base)                          # copy fixed params
+        for key, val in zip(grid_keys, combo_values):
+            entry[key] = val                        # override / add grid param
+        combinations.append(entry)
+
+    return combinations
+
+
 def resolve_autoencoder(autoencoder_type: str):
     """Return the autoencoder *class* that corresponds to *autoencoder_type*. Case insensitive
-    Raises
-    ------
-    ValueError
-        If *autoencoder_type* is not found in the registry.
-    ImportError
-        If the module or class cannot be imported.
     """
     key = autoencoder_type.lower()
     if key not in AUTOENCODER_REGISTRY:

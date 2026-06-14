@@ -101,16 +101,7 @@ class Autoencoder:
 
     def train(self, X, epochs, lr, batch_size, log_every, optimizer="adam"):
         """
-        Train the autoencoder in-place.
-
-        Parameters
-        ----------
-        X          : ndarray (n_samples, n_features)
-        epochs     : number of full passes over the data
-        lr         : learning rate
-        batch_size : mini-batch size
-        log_every  : print loss every N epochs (0 = silent)
-        optimizer  : "sgd" or "adam" (default: "adam")
+        Train the autoencoder in-place
         """
         if optimizer not in OPTIMIZERS:
             raise ValueError(f"Unknown optimizer '{optimizer}'. Choose from: {OPTIMIZERS}")
@@ -141,3 +132,46 @@ class Autoencoder:
 
             if log_every and (epoch + 1) % log_every == 0:
                 print(f"Epoch {epoch+1}/{epochs} | Loss: {epoch_loss/n_batches:.4f}")
+
+    # new Autoencoder.train that captures per-epoch loss
+    def train_and_collect(self,X, epochs, lr, batch_size, log_every, optimizer) -> list[float]:
+        """Run training and return the mean batch loss for every epoch.
+
+        We replicate the training loop here rather than monkey-patching so that
+        the original ``Autoencoder.train`` stays untouched.
+        """
+        if optimizer not in OPTIMIZERS:
+            raise ValueError(f"Unknown optimizer '{optimizer}'. Choose from: {OPTIMIZERS}")
+
+        if optimizer == "adam":
+            self._init_adam_state()
+
+        epoch_losses: list[float] = []
+
+        for epoch in range(epochs):
+            idx = self.rng.permutation(len(X))
+            X_shuffled = X[idx]
+            epoch_loss = 0.0
+            n_batches = 0
+
+            for start in range(0, len(X), batch_size):
+                batch = X_shuffled[start:start + batch_size]
+                out = self.forward(batch)
+                epoch_loss += mse(out, batch)
+
+                dW_list, db_list = self._compute_grads(batch)
+
+                if optimizer == "adam":
+                    self._apply_adam(dW_list, db_list, lr)
+                else:
+                    self._apply_sgd(dW_list, db_list, lr)
+
+                n_batches += 1
+
+            mean_loss = epoch_loss / n_batches
+            epoch_losses.append(mean_loss)
+
+            if log_every and (epoch + 1) % log_every == 0:
+                print(f"  [run] Epoch {epoch + 1}/{epochs} | Loss: {mean_loss:.10f}")
+
+        return epoch_losses

@@ -1,11 +1,28 @@
-import argparse
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from utils.config_loader import load_config, resolve_autoencoder
-from utils.font_loader import load_font
+"""test_autoencoder.py
+Entry point for training and evaluating autoencoders on a bitmap font
 
-# DEFAULT HYPERPARAMETERS
+Modes
+-----
+--config CONFIG_JSON
+    Load all hyperparameters from a JSON file.  If the file contains a
+    ``"grid"`` section, every combination is run (possibly in parallel via
+    ``--workers``).
+
+Output (per combination when using a grid)
+------------------------------------------
+<out_dir>/reconstruction_<id>.txt   — bitmap comparison
+<out_dir>/autoencoder_results_<id>.png — loss curve + error bar chart
+<out_dir>/grid_results.csv          — hyperparams + per-epoch MSE for all runs
+"""
+
+import argparse
+import numpy as np
+
+from utils.config_loader import load_config, expand_grid, resolve_autoencoder
+from utils.font_loader import load_font
+from utils.grid_runner import run_grid
+
+# default hyperparameters
 LAYER_DIMS  = [35, 24, 8, 2, 8, 24, 35]
 ACTIVATION  = "tanh"
 OPTIMIZER   = "adam"
@@ -14,12 +31,12 @@ EPOCHS      = 100_000
 LR          = 0.0001
 BATCH_SIZE  = 4
 LOG_EVERY   = 1_000
-THRESHOLD   = 0.5          # binarisation threshold
+THRESHOLD   = 0.5
 MAX_ERRORS  = 1
 AUTOENCODER = "simple"
-OUT_DIR     = "results"    # default output directory
-FONT_FILE = "font.h"
-
+OUT_DIR     = "results"
+FONT_FILE   = "font.h"
+WORKERS     = 1
 
 
 def binarise(output: np.ndarray, threshold: float = THRESHOLD) -> np.ndarray:
@@ -28,22 +45,21 @@ def binarise(output: np.ndarray, threshold: float = THRESHOLD) -> np.ndarray:
 
 
 def pixel_errors(pred_bin: np.ndarray, y_true: np.ndarray) -> np.ndarray:
-    """Return number of wrong pixels for each sample."""
+    """Return number of wrong pixels per sample."""
     return np.sum(pred_bin != y_true, axis=1)
 
 
 def format_bitmap_side_by_side(
-    original: np.ndarray,
+    original:      np.ndarray,
     reconstructed: np.ndarray,
-    label: str,
-    errors: int,
-    rows: int = 7,
-    cols: int = 5,
+    label:         str,
+    errors:        int,
+    rows:          int = 7,
+    cols:          int = 5,
 ) -> str:
-    """Return a string showing original and reconstructed bitmaps side by side."""
+    """Return a printable string showing original and reconstructed bitmaps."""
     orig_grid = original.reshape(rows, cols)
     rec_grid  = reconstructed.reshape(rows, cols)
-
     lines = [f"[ {label} ]  —  {errors} pixel error(s)"]
     lines.append(f"  {'Original':<13}  {'Reconstructed'}")
     lines.append(f"  {'-'*11}  {'-'*13}")
@@ -54,7 +70,6 @@ def format_bitmap_side_by_side(
         lines.append(f"  {orig_row}   {rec_row}{diff}")
     lines.append("")
     return "\n".join(lines)
-
 
 
 def run_test(
@@ -71,106 +86,52 @@ def run_test(
     threshold:        float = THRESHOLD,
     max_errors:       int   = MAX_ERRORS,
     out_dir:          str   = OUT_DIR,
-):
-    # Ensure the output directory exists before writing anything.
-    os.makedirs(out_dir, exist_ok=True)
-    reconstruction_path = os.path.join(out_dir, "reconstruction.txt")
-    plot_path           = os.path.join(out_dir, "autoencoder_results.png")
-    print(f"Output directory : {os.path.abspath(out_dir)}")
+    workers:          int   = WORKERS,
+) -> tuple:
+    """Train and evaluate one (or more, if a grid) autoencoder configuration.
 
-    X, bitmaps, labels = load_font(font_path)
+    Returns
+    -------
+    tuple
+        ``(passed, failed, errors)`` for the single run.
+    """
+    X, _, labels = load_font(font_path)
     print(f"Loaded {len(X)} characters  |  input dim = {X.shape[1]}")
 
-    AEClass = resolve_autoencoder(autoencoder_type)
-    ae = AEClass(layer_dims, activation, seed)
-
-    print(f"\nAutoencoder  : {autoencoder_type} ({AEClass.__name__})")
-    print(f"Architecture : {layer_dims}")
-    print(f"Activation   : {activation}")
-    print(f"Training for {epochs} epochs …\n")
-    ae.train(X, epochs=epochs, lr=lr, batch_size=batch_size,
-             log_every=log_every, optimizer=optimizer)
-
-    latent_all        = ae.encode(X)
-    reconstructed_raw = ae.decode(latent_all)
-    reconstructed_bin = binarise(reconstructed_raw, threshold=threshold)
-
-    errors = pixel_errors(reconstructed_bin, X)
-
-    print("\n" + "="*55)
-    print(f"{'Idx':>4}  {'Label':<20}  {'Errors':>6}  {'Pass':>5}")
-    print("-"*55)
-    for i, (label, err) in enumerate(zip(labels, errors)):
-        status = "PASSED" if err <= max_errors else "FAILED"
-        print(f"{i:>4}  {label:<20}  {err:>6}  {status:>5}")
-
-    passed  = np.sum(errors <= max_errors)
-    failed  = len(errors) - passed
-    avg_err = errors.mean()
-    max_err = errors.max()
-
-    print("="*55)
-    print(f"\nSummary")
-    print(f"  Characters passed (≤{max_errors} wrong pixel) : {passed}/{len(X)}")
-    print(f"  Characters failed                    : {failed}/{len(X)}")
-    print(f"  Average pixel errors per character   : {avg_err:.2f}")
-    print(f"  Worst-case pixel errors              : {max_err}")
-
-    goal_met = (failed == 0)
-    print(
-        f"\n{f"GOAL MET, all characters reconstructed within tolerance of {max_errors}!" if goal_met else f"GOAL NOT MET, some characters exceed the error threshold of {max_errors}"}"
+    params = dict(
+        autoencoder_type = autoencoder_type,
+        layer_dims       = layer_dims,
+        activation       = activation,
+        optimizer        = optimizer,
+        seed             = seed,
+        epochs           = epochs,
+        lr               = lr,
+        batch_size       = batch_size,
+        log_every        = log_every,
+        threshold        = threshold,
+        max_errors       = max_errors,
     )
 
-    with open(reconstruction_path, "w", encoding="utf-8") as f:
-        f.write("Autoencoder Reconstruction Report\n")
-        f.write(f"Autoencoder  : {autoencoder_type} ({AEClass.__name__})\n")
-        f.write(f"Architecture : {layer_dims}\n")
-        f.write(f"Activation   : {activation}  |  Threshold : {threshold}\n")
-        f.write(f"Epochs: {epochs}  |  LR: {lr}  |  Batch: {batch_size}\n")
-        f.write(f"Passed: {passed}/{len(X)}  |  Avg errors: {avg_err:.2f}  |  Max errors: {max_err}\n")
-        f.write("=" * 50 + "\n\n")
-        for i, (label, err) in enumerate(zip(labels, errors)):
-            block = format_bitmap_side_by_side(X[i], reconstructed_bin[i], label, err)
-            f.write(block + "\n")
-    print(f"Character comparison saved to {reconstruction_path}")
+    results = run_grid(
+        combinations = [params],
+        X            = X,
+        labels       = list(labels),
+        out_dir      = out_dir,
+        workers      = workers,
+    )
 
-    latent = latent_all
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    r = results[0]
+    return r.passed, r.failed, r.per_char_errors
 
-    ax = axes[0]
-    ax.scatter(latent[:, 0], latent[:, 1],
-               c=np.arange(len(X)), cmap="tab20", s=80, zorder=3)
-    for i, label in enumerate(labels):
-        ax.annotate(label, (latent[i, 0], latent[i, 1]),
-                    fontsize=7, ha="center", va="bottom",
-                    xytext=(0, 5), textcoords="offset points")
-    ax.set_title("2-D Latent Space")
-    ax.set_xlabel("z₁")
-    ax.set_ylabel("z₂")
-    ax.grid(True, alpha=0.3)
-
-    ax2 = axes[1]
-    colours = ["green" if e <= max_errors else "red" for e in errors]
-    ax2.bar(range(len(errors)), errors, color=colours, edgecolor="black", linewidth=0.5)
-    ax2.axhline(max_errors, color="red", linestyle="--",
-                label=f"Threshold ({max_errors})")
-    ax2.set_xticks(range(len(labels)))
-    ax2.set_xticklabels(labels, rotation=90, fontsize=7)
-    ax2.set_ylabel("Pixel errors")
-    ax2.set_title("Reconstruction errors per character")
-    ax2.legend()
-
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=150)
-    print(f"\nPlot saved to {plot_path}")
-    plt.show()
-
-    return passed, failed, errors
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Test an autoencoder on a font.h bitmap file.",
+        description=(
+            "Train and evaluate autoencoders on a bitmap font file.  "
+            "Use --config to load hyperparameters (and optional grid search) "
+            "from JSON, or pass individual flags for a single run."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -179,25 +140,38 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="CONFIG_JSON",
         default=None,
         help=(
-            "Path to a JSON config file. When provided, ALL hyperparameters "
-            "are read from it and the commandline flags are ignored"
+            "Path to a JSON config file.  When provided, ALL hyperparameters "
+            "are read from it (the individual flags below are ignored).  "
+            "If the file contains a \"grid\" section, all combinations are run."
+        ),
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=WORKERS,
+        help=(
+            "Maximum number of parallel worker processes for grid search.  "
+            "Use 1 for sequential execution."
         ),
     )
 
-    parser.add_argument("--font",      default="font.h",
+    parser.add_argument("--font",        default=FONT_FILE,
                         help="Path to the font bitmap file.")
     parser.add_argument("--autoencoder", default=AUTOENCODER,
                         dest="autoencoder_type",
                         help="Autoencoder architecture to use (e.g. 'simple').")
-    parser.add_argument("--threshold", type=float, default=THRESHOLD,
+    parser.add_argument("--threshold",   type=float, default=THRESHOLD,
                         help="Binarisation threshold.")
-    parser.add_argument("--out",       default=OUT_DIR,
-                        dest="out_dir",
-                        help=(
-                            "Directory where output files are written "
-                            "(reconstruction.txt and autoencoder_results.png). "
-                            "Created automatically if it does not exist."
-                        ))
+    parser.add_argument(
+        "--out",
+        default=OUT_DIR,
+        dest="out_dir",
+        help=(
+            "Directory where output files are written "
+            "(reconstruction_*.txt, autoencoder_results_*.png, grid_results.csv). "
+            "Created automatically if it does not exist."
+        ),
+    )
 
     return parser
 
@@ -208,27 +182,27 @@ if __name__ == "__main__":
 
     if args.config is not None:
         print(f"Loading config from {args.config!r} …")
-        cfg = load_config(args.config)
+        cfg          = load_config(args.config)
+        combinations = expand_grid(cfg)
 
-        run_test(
-            font_path        = cfg.get("font",             FONT_FILE),
-            autoencoder_type = cfg.get("autoencoder_type", AUTOENCODER),
-            layer_dims       = cfg.get("layer_dims",       LAYER_DIMS),
-            activation       = cfg.get("activation",       ACTIVATION),
-            optimizer        = cfg.get("optimizer",        OPTIMIZER),
-            seed             = cfg.get("seed",             SEED),
-            epochs           = cfg.get("epochs",           EPOCHS),
-            lr               = cfg.get("lr",               LR),
-            batch_size       = cfg.get("batch_size",       BATCH_SIZE),
-            log_every        = cfg.get("log_every",        LOG_EVERY),
-            threshold        = cfg.get("threshold",        THRESHOLD),
-            max_errors       = cfg.get("max_errors",       MAX_ERRORS),
-            out_dir          = cfg.get("out",              OUT_DIR),
+        print(f"Expanded grid → {len(combinations)} combination(s)")
+
+        X, _, labels = load_font(cfg.get("font", FONT_FILE))
+        print(f"Loaded {len(X)} characters  |  input dim = {X.shape[1]}")
+
+        run_grid(
+            combinations = combinations,
+            X            = X,
+            labels       = list(labels),
+            out_dir      = cfg.get("out", OUT_DIR),
+            workers      = args.workers,
         )
+
     else:
         run_test(
             font_path        = args.font,
             autoencoder_type = args.autoencoder_type,
             threshold        = args.threshold,
             out_dir          = args.out_dir,
+            workers          = args.workers,
         )
