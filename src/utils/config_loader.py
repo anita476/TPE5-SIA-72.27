@@ -8,6 +8,7 @@ REQUIRED_KEYS = {"layer_dims", "activation", "optimizer", "seed", "epochs", "lr"
 
 AUTOENCODER_REGISTRY: dict[str, tuple[str, str]] = {
     "simple": ("autoencoders.SimpleAutoencoder", "SimpleAutoencoder"),
+    "denoising": ("autoencoders.DenoisingAutoencoder", "DenoisingAutoencoder"),
 }
 
 def load_config(config_path: str) -> dict[str, Any]:

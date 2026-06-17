@@ -1,0 +1,18 @@
+{
+    "layer_dims":       [35, 50, 24, 50, 35],
+    "activation":       "relu",
+    "optimizer":        "adam",
+    "seed":             42,
+    "epochs":           20000,
+    "lr":               0.0005,
+    "batch_size":       8,
+    "log_every":        1000,
+    "threshold":        0.5,
+    "max_errors":       1,
+    "autoencoder_type": "denoising",
+    "noise_type":       "salt_pepper",
+    "noise_level":      0.2,
+    "noise_levels":     [0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
+    "font":             "../data/font.h",
+    "out":              "output/denoising"
+}

@@ -56,6 +56,9 @@ class Autoencoder:
         self._adam_mb = [np.zeros_like(b) for b in self.biases]
         self._adam_vb = [np.zeros_like(b) for b in self.biases]
 
+    def _corrupt_input(self, batch):
+        return batch
+
     def forward(self, x):
         raise NotImplementedError("Subclasses must implement forward().")
 
@@ -118,7 +121,8 @@ class Autoencoder:
 
             for start in range(0, len(X), batch_size):
                 batch = X_shuffled[start:start + batch_size]
-                out   = self.forward(batch)
+                net_input = self._corrupt_input(batch)
+                out   = self.forward(net_input)
                 epoch_loss += mse(out, batch)
 
                 dW_list, db_list = self._compute_grads(batch)
@@ -156,7 +160,8 @@ class Autoencoder:
 
             for start in range(0, len(X), batch_size):
                 batch = X_shuffled[start:start + batch_size]
-                out = self.forward(batch)
+                net_input = self._corrupt_input(batch)
+                out = self.forward(net_input)
                 epoch_loss += mse(out, batch)
 
                 dW_list, db_list = self._compute_grads(batch)
