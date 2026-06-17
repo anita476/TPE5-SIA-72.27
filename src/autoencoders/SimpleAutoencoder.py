@@ -30,8 +30,8 @@ class SimpleAutoencoder(Autoencoder):
         delta = mse_grad(self.a[-1], y_true) * sigmoid_grad(self.z[-1])
 
         for i in reversed(range(len(self.weights))):
-            dW_list[i] = self.a[i].T @ delta / y_true.shape[0]
-            db_list[i] = np.mean(delta, axis=0, keepdims=True)
+            dW_list[i] = self.a[i].T @ delta
+            db_list[i] = np.sum(delta, axis=0, keepdims=True)
 
             if i > 0:
                 delta = (delta @ self.weights[i].T) * self.act_grad(self.z[i - 1])

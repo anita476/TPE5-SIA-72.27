@@ -12,6 +12,7 @@ Outputs (in "out"):
 from __future__ import annotations
 
 import argparse
+import os
 
 from autoencoders.SimpleAutoencoder import SimpleAutoencoder
 from utils.config_loader import load_config
@@ -21,7 +22,6 @@ from utils.latent_generate import (
     latent_grid,
     latent_scatter_with_point,
 )
-import os
 
 
 def main():
@@ -51,7 +51,7 @@ def main():
 
     threshold = cfg.get("threshold", 0.5)
 
-    grid_path = latent_grid(ae, X, labels, out_dir, threshold=threshold)
+    grid_path = latent_grid(ae, X, out_dir, threshold=threshold)
     print(f"Latent grid          -> {grid_path}")
 
     # Interpolate between two known letters; midpoints are unseen characters.

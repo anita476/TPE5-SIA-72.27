@@ -14,7 +14,7 @@ def _grid(flat: np.ndarray) -> np.ndarray:
     return flat.reshape(ROWS, COLS)
 
 
-def latent_grid(ae, X, labels, out_dir, n=12, binarise=True, threshold=0.5):
+def latent_grid(ae, X, out_dir, n=12, binarise=True, threshold=0.5):
     """Decode a regular grid of latent points covering the data's latent range."""
     z = ae.encode(X)
     z1 = np.linspace(z[:, 0].min(), z[:, 0].max(), n)
