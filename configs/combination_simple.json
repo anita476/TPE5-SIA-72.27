@@ -1,7 +1,7 @@
 {
-    "font":             "../data/font.h",
+    "font":             "data/font.h",
     "autoencoder_type": "simple",
-    "out":              "results/test",
+    "out":              "output/grid_test",
 
     "layer_dims":       [35, 24, 8, 2, 8, 24, 35],
     "activation":       "tanh",

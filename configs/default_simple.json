@@ -12,6 +12,6 @@
     "threshold":        0.5,
     "max_errors":       1,
     "autoencoder_type": "simple",
-    "font":             "../data/font.h",
+    "font":             "data/font.h",
     "out":              "output/simple"
 }

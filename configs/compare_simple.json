@@ -1,0 +1,25 @@
+{
+    "font":             "data/font.h",
+    "autoencoder_type": "simple",
+    "out":              "output/compare_simple",
+
+    "layer_dims":       [35, 30, 15, 2, 15, 30, 35],
+    "activation":       "tanh",
+    "optimizer":        "adam",
+    "seed":             0,
+    "epochs":           30000,
+    "lr":               0.001,
+    "batch_size":       8,
+    "log_every":        0,
+    "patience":         8000,
+    "min_delta":        1e-7,
+    "threshold":        0.5,
+    "max_errors":       1,
+
+    "variants": [
+        {"name": "adam deep",    "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 30, 15, 2, 15, 30, 35]},
+        {"name": "adam shallow", "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 16, 2, 16, 35]},
+        {"name": "adam bn3",     "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 30, 15, 3, 15, 30, 35]},
+        {"name": "sgd deep",     "optimizer": "sgd",  "lr": 0.05,  "layer_dims": [35, 30, 15, 2, 15, 30, 35]}
+    ]
+}

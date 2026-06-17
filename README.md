@@ -19,7 +19,16 @@ pip install -r requirements.txt
 ```
 configs/                      configs JSON de cada experimento
 data/font.h                   dataset de caracteres (7x5)
-src/
+output/                       resultados (plots, CSV, reconstrucciones)
+scripts/                      entry points ejecutables
+  _bootstrap.py               agrega src/ al path y resuelve rutas a la raíz
+  main.py                     demo rápida
+  test_autoencoder.py         entrenar/evaluar (con grid)
+  generate_letter.py          generar letras nuevas
+  denoising_experiment.py     entrenar DAE + estudio de ruido
+  compare_experiment.py       comparar arquitecturas/optimizadores
+  compare_denoising.py        comparar tipos de ruido
+src/                          librería (paquetes importables)
   autoencoders/
     Autoencoder.py            clase base (entrenamiento, Adam/SGD,
                               early stopping, restauración del mejor modelo)
@@ -33,19 +42,19 @@ src/
     noise.py                  ruido: gaussian / salt_pepper / masking
     denoising_eval.py         estudio de denoising por nivel de ruido
     latent_generate.py        generación desde el espacio latente
-  test_autoencoder.py         entry point: entrenar/evaluar (con grid)
-  generate_letter.py          entry point: generar letras nuevas
-  denoising_experiment.py     entry point: entrenar DAE + estudio de ruido
+    comparison.py             estudio comparativo de variantes
 ```
 
 ## Uso
 
-Todos los comandos se corren desde `src/`.
+Los comandos se corren desde la **raíz del proyecto**. Las rutas de `font` y
+`out` de los configs se resuelven respecto de la raíz, así que las salidas
+siempre van a `output/`.
 
 ### 1a) Autoencoder básico (latente 2D, ≤1 píxel de error)
 
 ```bash
-python test_autoencoder.py --config ../configs/default_simple.json
+python scripts/test_autoencoder.py --config configs/default_simple.json
 ```
 
 Aprende los 32 caracteres con error ≤ 1 píxel. Salidas en `output/simple/`:
@@ -58,7 +67,7 @@ para barrer hiperparámetros en paralelo con `--workers N`.
 ### 1a-4) Generar una letra nueva desde el espacio latente
 
 ```bash
-python generate_letter.py --config ../configs/default_simple.json --from c --to e
+python scripts/generate_letter.py --config configs/default_simple.json --from c --to e
 ```
 
 Salidas en `output/simple/`: `latent_grid.png` (grilla decodificada),
@@ -68,13 +77,35 @@ Salidas en `output/simple/`: `latent_grid.png` (grilla decodificada),
 ### 1b) Denoising Autoencoder
 
 ```bash
-python denoising_experiment.py --config ../configs/default_denoising.json
+python scripts/denoising_experiment.py --config configs/default_denoising.json
 ```
 
 Entrena corrompiendo la entrada (objetivo = imagen limpia) y luego evalúa la
 reconstrucción a distintos niveles de ruido. Salidas en `output/denoising/`:
 `loss.png`, `denoising_vs_noise.png`, `denoising_examples_<nivel>.png`,
 `denoising_metrics.csv`.
+
+### Estudios comparativos
+
+Comparar arquitecturas / optimizadores del autoencoder básico (mismo presupuesto):
+
+```bash
+python scripts/compare_experiment.py --config configs/compare_simple.json
+```
+
+Define variantes en la clave `"variants"` del config. Salidas en
+`output/compare_simple/`: `compare_loss.png`, `compare_metrics.png`,
+`compare_results.csv`.
+
+Comparar la robustez del denoising según el tipo de ruido
+(gaussian / salt_pepper / masking):
+
+```bash
+python scripts/compare_denoising.py --config configs/default_denoising.json
+```
+
+Salidas en `output/denoising/noise_compare/`:
+`denoising_noise_comparison.png`, `denoising_noise_comparison.csv`.
 
 ## Opciones de config relevantes
 

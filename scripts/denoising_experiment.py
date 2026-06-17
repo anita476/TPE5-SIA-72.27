@@ -1,4 +1,14 @@
-from __future__ import annotations
+"""denoising_experiment.py
+Train a Denoising Autoencoder and study its noise-removal capability.
+
+Usage:
+    python scripts/denoising_experiment.py --config configs/default_denoising.json
+
+Extra config keys: noise_type, noise_level (training), noise_levels (eval list).
+"""
+
+import _bootstrap
+from _bootstrap import resolve
 
 import argparse
 import os
@@ -32,10 +42,9 @@ def main():
     parser.add_argument("--config", required=True, help="Path to JSON config.")
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
+    cfg = load_config(resolve(args.config))
 
-    font_path = cfg.get("font", "../data/font.h")
-    out_dir = cfg.get("out", "results/denoising")
+    out_dir = resolve(cfg.get("out", "output/denoising"))
     os.makedirs(out_dir, exist_ok=True)
 
     layer_dims = cfg["layer_dims"]
@@ -55,7 +64,7 @@ def main():
     noise_level = cfg.get("noise_level", 0.3)
     noise_levels = cfg.get("noise_levels", [0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
 
-    X, _, labels = load_font(font_path)
+    X, _, labels = load_font(resolve(cfg.get("font", "data/font.h")))
     print(f"Loaded {len(X)} characters  |  input dim = {X.shape[1]}")
     print(f"Architecture : {layer_dims}")
     print(f"Train noise  : {noise_type} @ {noise_level}")

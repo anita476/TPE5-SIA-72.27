@@ -1,15 +1,13 @@
-"""Train the basic Autoencoder on font.h and generate new characters from its
+"""generate_letter.py
+Train the basic Autoencoder on font.h and generate new characters from its
 2-D latent space.
 
 Usage:
-    python generate_letter.py --config ../configs/default_simple.json
-
-Outputs (in "out"):
-    latent_grid.png            - decoded grid sweeping the latent plane
-    latent_interpolation.png   - new letters between two known letters
-    latent_generated_point.png - latent scatter + one generated glyph
+    python scripts/generate_letter.py --config configs/default_simple.json
 """
-from __future__ import annotations
+
+import _bootstrap
+from _bootstrap import resolve
 
 import argparse
 import os
@@ -33,11 +31,11 @@ def main():
                         help="Target character for interpolation.")
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
-    out_dir = cfg.get("out", "output/simple")
+    cfg = load_config(resolve(args.config))
+    out_dir = resolve(cfg.get("out", "output/simple"))
     os.makedirs(out_dir, exist_ok=True)
 
-    X, _, labels = load_font(cfg.get("font", "../data/font.h"))
+    X, _, labels = load_font(resolve(cfg.get("font", "data/font.h")))
     if cfg["layer_dims"][len(cfg["layer_dims"]) // 2] != 2:
         raise ValueError("Generation requires a 2-D latent (bottleneck = 2).")
 
@@ -55,14 +53,12 @@ def main():
     grid_path = latent_grid(ae, X, out_dir, threshold=threshold)
     print(f"Latent grid          -> {grid_path}")
 
-    # Interpolate between two known letters; midpoints are unseen characters.
     idx_a = labels.index(args.src) if args.src in labels else 0
     idx_b = labels.index(args.dst) if args.dst in labels else len(labels) - 1
     interp_path = interpolate(ae, X, labels, idx_a, idx_b, out_dir,
                               threshold=threshold)
     print(f"Interpolation        -> {interp_path}")
 
-    # Generate one glyph from the latent centroid (a point with no real letter).
     z = ae.encode(X)
     centroid = z.mean(axis=0)
     point_path = latent_scatter_with_point(ae, X, labels, centroid, out_dir,
