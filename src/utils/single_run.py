@@ -104,6 +104,8 @@ def execute_run(
     log_every        = params.get("log_every", 0)
     threshold        = params.get("threshold", 0.5)
     max_errors       = params.get("max_errors", 1)
+    patience         = params.get("patience")
+    min_delta        = params.get("min_delta", 1e-6)
 
     prefix = f"[run {run_id}]"
     print(f"{prefix} autoencoder={autoencoder_type}  activation={activation}  "
@@ -113,7 +115,8 @@ def execute_run(
     ae = AEClass(layer_dims, activation, seed)
 
     epoch_losses = ae.train_and_collect(
-        X, epochs, lr, batch_size, log_every, optimizer
+        X, epochs, lr, batch_size, log_every, optimizer,
+        patience=patience, min_delta=min_delta,
     )
 
     latent_all        = ae.encode(X)

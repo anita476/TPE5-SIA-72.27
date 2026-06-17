@@ -48,6 +48,8 @@ def main():
     log_every = cfg.get("log_every", 0)
     threshold = cfg.get("threshold", 0.5)
     max_errors = cfg.get("max_errors", 1)
+    patience = cfg.get("patience")
+    min_delta = cfg.get("min_delta", 1e-6)
 
     noise_type = cfg.get("noise_type", "gaussian")
     noise_level = cfg.get("noise_level", 0.3)
@@ -66,9 +68,12 @@ def main():
         noise_level=noise_level,
     )
 
-    losses = ae.train_and_collect(X, epochs, lr, batch_size, log_every, optimizer)
+    losses = ae.train_and_collect(
+        X, epochs, lr, batch_size, log_every, optimizer,
+        patience=patience, min_delta=min_delta,
+    )
     loss_path = _plot_loss(losses, out_dir)
-    print(f"\nFinal loss : {losses[-1]:.6f}")
+    print(f"\nBest loss  : {min(losses):.6f}  (restored model)")
     print(f"Loss plot  -> {loss_path}")
 
     run_denoising_study(

@@ -47,6 +47,7 @@ def main():
     ae.train_and_collect(
         X, cfg["epochs"], cfg["lr"], cfg["batch_size"],
         cfg.get("log_every", 0), cfg["optimizer"],
+        patience=cfg.get("patience"), min_delta=cfg.get("min_delta", 1e-6),
     )
 
     threshold = cfg.get("threshold", 0.5)
