@@ -99,6 +99,62 @@ def latent_traversal(vae, X_bw, labels, idx1, idx2, n_steps=10):
     return path
 
 
+
+def latent_traversal_annotated(vae, X_bw, labels, idx1, idx2,
+                               n_steps=9, out_dir=".", filename=None):
+    latent_dim = vae.layer_dims[vae.bottleneck_idx]
+    if latent_dim != 2:
+        print(f"  annotated traversal needs latent_dim=2 (got {latent_dim}); "
+              f"the decoded strip still works, but the 2-D map is skipped.")
+
+    # encode endpoints to their MEANS (deterministic latent position)
+    mu_all = vae.encode(X_bw)                  # (n, 2) — for the background scatter
+    mu1 = vae.encode(X_bw[idx1:idx1 + 1])[0]   # (2,)
+    mu2 = vae.encode(X_bw[idx2:idx2 + 1])[0]   # (2,)
+
+    # the straight line between them, sampled at n_steps values of t
+    ts = np.linspace(0.0, 1.0, n_steps)
+    zs = np.array([(1.0 - t) * mu1 + t * mu2 for t in ts])      # (n_steps, 2)
+    frames = np.array([vae.decode(z[None, :])[0] for z in zs])  # (n_steps, 400)
+
+    fig = plt.figure(figsize=(max(9, 1.25 * n_steps), 5.0))
+    gs = fig.add_gridspec(2, n_steps, height_ratios=[3.2, 1.3], hspace=0.35)
+
+    # ── top: latent-space map (only meaningful for 2-D latent) ──
+    if latent_dim == 2:
+        ax = fig.add_subplot(gs[0, :])
+        ax.scatter(mu_all[:, 0], mu_all[:, 1], c="lightgray", s=70, zorder=1)
+        ax.plot(zs[:, 0], zs[:, 1], "--", color="gray", lw=1.2, zorder=2)
+        sc = ax.scatter(zs[:, 0], zs[:, 1], c=ts, cmap="viridis",
+                        s=55, zorder=3, edgecolor="white", linewidth=0.5)
+        ax.scatter(*mu1, c="tab:blue", s=170, zorder=5,
+                   edgecolor="black", linewidth=1.0)
+        ax.scatter(*mu2, c="tab:red", s=170, zorder=5,
+                   edgecolor="black", linewidth=1.0)
+        ax.annotate(labels[idx1], mu1, fontsize=8, ha="center", va="bottom",
+                    xytext=(0, 10), textcoords="offset points", color="tab:blue")
+        ax.annotate(labels[idx2], mu2, fontsize=8, ha="center", va="bottom",
+                    xytext=(0, 10), textcoords="offset points", color="tab:red")
+        ax.set_title("Latent space: the line walked between the two emojis",
+                     fontsize=10)
+        ax.set_xlabel("z1"); ax.set_ylabel("z2")
+        ax.grid(True, alpha=0.3)
+        cb = fig.colorbar(sc, ax=ax, fraction=0.025, pad=0.01)
+        cb.set_label("t", fontsize=8)
+
+    # ── bottom: decoded image under each sampled z ──
+    for i in range(n_steps):
+        axi = fig.add_subplot(gs[1, i])
+        axi.imshow(frames[i].reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+        axi.set_title(f"t={ts[i]:.2f}", fontsize=7)
+        axi.set_xticks([]); axi.set_yticks([])
+
+    fig.suptitle(f"Latent traversal: {labels[idx1]}  →  {labels[idx2]}", fontsize=12)
+    filename = filename or f"vae_traversal_annotated_{idx1}_{idx2}.png"
+    path = os.path.join(out_dir, filename)
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
 # ── 2-D latent grid ─────────────────────────────────────────────────────────
 
 def latent_grid_decode(vae, grid_size=15, z_range=2.5):
@@ -185,7 +241,8 @@ def main():
     ]
     for idx1, idx2 in pairs:
         if idx1 < n and idx2 < n:
-            p = latent_traversal(vae, X_bw, labels, idx1, idx2, n_steps=10)
+            p = latent_traversal_annotated(vae, X_bw, labels, idx1, idx2,
+                                       n_steps=9, out_dir=OUT_DIR)
             print(f"  {labels[idx1]} -> {labels[idx2]}: {p}")
 
     # 3) 2-D latent grid
