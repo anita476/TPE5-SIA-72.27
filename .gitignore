@@ -222,3 +222,7 @@ __marimo__/
 *.csv
 *.txt
 output/*
+CLAUDE.md
+.gitignore
+vae_theory.md
+.DS_Store

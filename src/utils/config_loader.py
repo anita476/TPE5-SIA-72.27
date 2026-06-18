@@ -10,6 +10,7 @@ AUTOENCODER_REGISTRY: dict[str, tuple[str, str]] = {
     "simple": ("autoencoders.SimpleAutoencoder", "SimpleAutoencoder"),
     "denoising": ("autoencoders.DenoisingAutoencoder", "DenoisingAutoencoder"),
     "variational": ("autoencoders.VariationalAutoencoder", "VariationalAutoencoder"),
+    "vae": ("autoencoders.VariationalAutoencoder", "VariationalAutoencoder"),
 }
 
 def load_config(config_path: str) -> dict[str, Any]:
