@@ -70,6 +70,9 @@ class Autoencoder:
         # Identity by default; DenoisingAutoencoder overrides to inject noise.
         return batch
 
+    def _loss(self, out, batch):
+        return mse(out, batch)
+
     def forward(self, x):
         raise NotImplementedError("Subclasses must implement forward().")
 
@@ -143,7 +146,7 @@ class Autoencoder:
                 batch = X_shuffled[start:start + batch_size]
                 net_input = self._corrupt_input(batch)
                 out = self.forward(net_input)
-                epoch_loss += mse(out, batch)
+                epoch_loss += self._loss(out, batch)
 
                 dW_list, db_list = self._compute_grads(batch)
 
