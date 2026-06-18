@@ -1,0 +1,18 @@
+{
+  "sweep": [
+    {"layer_dims": [1200, 256, 2, 256, 1200], "beta": 0.1, "lr": 1e-3, "epochs": 3000},
+    {"layer_dims": [1200, 256, 2, 256, 1200], "beta": 0.5, "lr": 1e-3, "epochs": 3000},
+    {"layer_dims": [1200, 256, 2, 256, 1200], "beta": 1.0, "lr": 1e-3, "epochs": 3000},
+    {"layer_dims": [1200, 512, 2, 512, 1200], "beta": 0.5, "lr": 1e-3, "epochs": 3000},
+    {"layer_dims": [1200, 256, 8, 256, 1200], "beta": 1.0, "lr": 1e-3, "epochs": 3000},
+    {"layer_dims": [1200, 256, 16, 256, 1200], "beta": 1.0, "lr": 1e-3, "epochs": 3000}
+  ],
+  "shared": {
+    "activation": "relu",
+    "seed": 42,
+    "batch_size": 20,
+    "optimizer": "adam",
+    "log_every": 500,
+    "patience": 500
+  }
+}

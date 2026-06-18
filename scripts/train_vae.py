@@ -11,6 +11,9 @@ Produces:
 """
 from __future__ import annotations
 
+import _bootstrap
+from _bootstrap import resolve
+
 import argparse
 import os
 import json
@@ -204,24 +207,33 @@ def plot_latent_comparison(latent_vae, latent_ae, labels,
     return path
 
 
-def plot_reconstructions(X_bw, model, labels, filename="vae_reconstructions.png",
-                         rows=20, cols=20):
-    latent = model.encode(X_bw)
+def _imshow_emoji(ax, flat, is_color=False):
+    """Display a single flattened emoji (B&W or RGB)."""
+    if is_color:
+        img = np.clip(flat.reshape(20, 20, 3), 0, 1)
+        ax.imshow(img)
+    else:
+        ax.imshow(flat.reshape(20, 20), cmap="gray_r", vmin=0, vmax=1)
+
+
+def plot_reconstructions(X, model, labels, filename="vae_reconstructions.png",
+                         is_color=False):
+    latent = model.encode(X)
     recon = model.decode(latent)
-    n = len(X_bw)
+    n = len(X)
 
     fig, axes = plt.subplots(2, n, figsize=(1.5 * n, 3.2))
     if n == 1:
         axes = axes.reshape(2, 1)
 
     for i in range(n):
-        axes[0, i].imshow(X_bw[i].reshape(rows, cols), cmap="gray_r", vmin=0, vmax=1)
+        _imshow_emoji(axes[0, i], X[i], is_color)
         axes[0, i].set_xticks([]); axes[0, i].set_yticks([])
         axes[0, i].set_title(labels[i], fontsize=7)
         if i == 0:
             axes[0, i].set_ylabel("Original", fontsize=9)
 
-        axes[1, i].imshow(recon[i].reshape(rows, cols), cmap="gray_r", vmin=0, vmax=1)
+        _imshow_emoji(axes[1, i], recon[i], is_color)
         axes[1, i].set_xticks([]); axes[1, i].set_yticks([])
         if i == 0:
             axes[1, i].set_ylabel("Reconstructed", fontsize=9)
@@ -337,26 +349,41 @@ def main():
     parser = argparse.ArgumentParser(description="Train VAE on emoji dataset")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to sweep config JSON (default: configs/vae_sweep.json)")
+    parser.add_argument("--color", action="store_true",
+                        help="Train on color (RGB 1200-dim) instead of B&W (400-dim)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
+    is_color = args.color
+    prefix = "color_" if is_color else ""
 
     print("Loading emojis...")
     data_path = os.path.join(os.path.dirname(__file__), "..", "data", "emojis.h")
-    _, X_bw, bitmaps_color, bitmaps_bw, labels = load_emojis(data_path)
-    print(f"  {len(labels)} emojis, X_bw shape = {X_bw.shape}")
+    X_color, X_bw, bitmaps_color, bitmaps_bw, labels = load_emojis(data_path)
+
+    if is_color:
+        X = X_color
+        default_sweep = os.path.join(os.path.dirname(__file__), "..",
+                                     "configs", "vae_sweep_color.json")
+        print(f"  COLOR mode: {len(labels)} emojis, X shape = {X.shape}")
+    else:
+        X = X_bw
+        default_sweep = os.path.join(os.path.dirname(__file__), "..",
+                                     "configs", "vae_sweep.json")
+        print(f"  B&W mode: {len(labels)} emojis, X shape = {X.shape}")
 
     # ── Step 1: Hyperparameter sweep ─────────────────────────────────────
     print("\n=== Hyperparameter Sweep ===")
-    sweep_results = run_sweep(X_bw, labels, config_path=args.config)
-    write_tuning_table(sweep_results)
+    config_path = args.config or default_sweep
+    sweep_results = run_sweep(X, labels, config_path=config_path)
+    write_tuning_table(sweep_results, filename=f"{prefix}vae_tuning_table.txt")
 
     # Pick the best 2-D latent config by lowest reconstruction error
-    # (total loss isn't comparable across different beta values)
-    best_2d = min(
-        [r for r in sweep_results if r["config"]["layer_dims"][2] == 2],
-        key=lambda r: r["final_recon"]
-    )
+    candidates_2d = [r for r in sweep_results if r["config"]["layer_dims"][2] == 2]
+    if candidates_2d:
+        best_2d = min(candidates_2d, key=lambda r: r["final_recon"])
+    else:
+        best_2d = min(sweep_results, key=lambda r: r["final_recon"])
     best_cfg = best_2d["config"]
     best_vae = best_2d["vae"]
     best_total, best_recon, best_kl = best_2d["losses"]
@@ -366,20 +393,23 @@ def main():
     # ── Step 2: Loss curves for best model ───────────────────────────────
     p1 = plot_loss_curves(
         best_total, best_recon, best_kl,
-        title_extra=f"(beta={best_cfg['beta']})", filename="vae_loss_curves.png"
+        title_extra=f"(beta={best_cfg['beta']})",
+        filename=f"{prefix}vae_loss_curves.png"
     )
     print(f"Loss curves -> {p1}")
 
     # ── Step 3: Reconstructions ──────────────────────────────────────────
-    p2 = plot_reconstructions(X_bw, best_vae, labels)
+    p2 = plot_reconstructions(X, best_vae, labels,
+                              filename=f"{prefix}vae_reconstructions.png",
+                              is_color=is_color)
     print(f"Reconstructions -> {p2}")
 
     # ── Step 4: VAE latent scatter (3 variants) ─────────────────────────
-    latent_vae = best_vae.encode(X_bw)
+    latent_vae = best_vae.encode(X)
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
         p = plot_latent_scatter(latent_vae, labels,
                                 f"VAE Latent Space (beta={best_cfg['beta']})",
-                                f"vae_latent_scatter{suffix}.png",
+                                f"{prefix}vae_latent_scatter{suffix}.png",
                                 bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
                                 mode=mode)
         print(f"VAE latent ({mode}) -> {p}")
@@ -387,14 +417,14 @@ def main():
     # ── Step 5: Plain AE for comparison ──────────────────────────────────
     print("\nTraining plain AE for latent space comparison...")
     ae = SimpleAutoencoder(best_cfg["layer_dims"], activation="relu", seed=42)
-    ae.train(X_bw, epochs=3000, lr=1e-3, batch_size=20, log_every=500,
+    ae.train(X, epochs=3000, lr=1e-3, batch_size=20, log_every=500,
              optimizer="adam", patience=500)
 
-    latent_ae = ae.encode(X_bw)
+    latent_ae = ae.encode(X)
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
         p = plot_latent_scatter(latent_ae, labels,
                                 "Plain AE Latent Space",
-                                f"ae_latent_scatter{suffix}.png",
+                                f"{prefix}ae_latent_scatter{suffix}.png",
                                 bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
                                 mode=mode)
         print(f"AE latent ({mode}) -> {p}")
@@ -403,7 +433,8 @@ def main():
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
         p = plot_latent_comparison(latent_vae, latent_ae, labels,
                                    bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
-                                   filename=f"vae_vs_ae_latent{suffix}.png", mode=mode)
+                                   filename=f"{prefix}vae_vs_ae_latent{suffix}.png",
+                                   mode=mode)
         print(f"Comparison ({mode}) -> {p}")
 
     # ── Save best model config ───────────────────────────────────────────
@@ -415,8 +446,9 @@ def main():
         "activation": "relu",
         "seed": 42,
         "batch_size": 20,
+        "is_color": is_color,
     }
-    cfg_path = os.path.join(OUT_DIR, "best_vae_config.json")
+    cfg_path = os.path.join(OUT_DIR, f"{prefix}best_vae_config.json")
     with open(cfg_path, "w") as f:
         json.dump(cfg_out, f, indent=2)
     print(f"Best config -> {cfg_path}")
