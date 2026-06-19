@@ -43,7 +43,9 @@ def train_and_evaluate(X, cfg, seed):
         X, cfg["epochs"], cfg["lr"],
         batch_size=cfg.get("batch_size", 20),
         log_every=cfg.get("log_every", 500),
+        optimizer=cfg.get("optimizer", "adam"),
         patience=cfg.get("patience"),
+        min_delta=cfg.get("min_delta", 1e-6),
     )
     latent = vae.encode(X)
     recon_out = vae.decode(latent)
@@ -371,7 +373,7 @@ def write_tuning_table(all_results, shared, seeds, filename="vae_arch_tuning_tab
     for i, r in enumerate(all_results):
         lines.append(
             f"{i+1:>2}  {r['label']:<40}  "
-            f"{r['mse_mean']:>8.6f} +/- {r['mse_std']:<7.6f}  "
+            f"{r['mse_mean']:>10.8f} +/- {r['mse_std']:<10.8f}  "
             f"{r['kl_mean']:>8.4f} +/- {r['kl_std']:<7.4f}  "
             f"{r['n_seeds']:>5}"
         )

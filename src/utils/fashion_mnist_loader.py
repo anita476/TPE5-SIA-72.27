@@ -104,6 +104,5 @@ def load_fashion_mnist(
         chosen.append(pick)
     chosen = np.concatenate(chosen)
     rng.shuffle(chosen)
-    print("hi")
 
     return X_all[chosen], y_all[chosen], LABEL_NAMES
