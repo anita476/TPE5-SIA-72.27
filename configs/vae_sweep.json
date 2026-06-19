@@ -19,11 +19,12 @@
   "shared": {
     "activation": "relu",
     "lr": 1e-3,
-    "epochs": 3000,
+    "epochs": 10000,
     "batch_size": 20,
     "optimizer": "adam",
     "log_every": 500,
-    "patience": 500
+    "patience": 500,
+    "recon_loss": "bce"
   },
   "seeds": [0, 1, 2, 3, 4]
 }

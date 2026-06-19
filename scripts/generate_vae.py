@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 
 from utils.emoji_loader import load_emojis
 from autoencoders.VariationalAutoencoder import VariationalAutoencoder
-from train_vae import train_vae_with_logging
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 ROWS, COLS = 20, 20
@@ -216,12 +215,14 @@ def main():
                 "layer_dims": [1200, 256, 2, 256, 1200],
                 "lr": 1e-3, "epochs": 3000,
                 "activation": "relu", "seed": 42, "batch_size": 20,
+                "recon_loss": "mse",
             }
         else:
             cfg = {
                 "layer_dims": [400, 128, 2, 128, 400],
                 "lr": 1e-3, "epochs": 3000,
                 "activation": "relu", "seed": 42, "batch_size": 20,
+                "recon_loss": "bce",
             }
         print(f"No saved config found, using defaults")
 
@@ -229,10 +230,10 @@ def main():
     print("\nTraining VAE...")
     vae = VariationalAutoencoder(
         cfg["layer_dims"], activation=cfg["activation"],
-        seed=cfg["seed"],
+        seed=cfg["seed"], recon_loss=cfg.get("recon_loss", "mse"),
     )
-    train_vae_with_logging(
-        vae, X, cfg["epochs"], cfg["lr"],
+    vae.train(
+        X, cfg["epochs"], cfg["lr"],
         batch_size=cfg["batch_size"], log_every=500, patience=500
     )
 

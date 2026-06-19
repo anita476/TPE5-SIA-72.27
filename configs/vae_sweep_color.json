@@ -23,7 +23,8 @@
     "batch_size": 20,
     "optimizer": "adam",
     "log_every": 500,
-    "patience": 500
+    "patience": 500,
+    "recon_loss": "mse"
   },
   "seeds": [0, 1, 2, 3, 4]
 }

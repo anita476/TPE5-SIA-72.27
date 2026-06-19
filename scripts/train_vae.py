@@ -34,72 +34,6 @@ from autoencoders.SimpleAutoencoder import SimpleAutoencoder
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
-# -- helpers -----------------------------------------------------------------
-
-def train_vae_with_logging(vae, X, epochs, lr, batch_size, optimizer="adam",
-                           log_every=100, patience=None, min_delta=1e-6):
-    """Train VAE and record recon, KL, and total loss per epoch separately."""
-    if optimizer == "adam":
-        vae._init_adam_state()
-
-    total_losses, recon_losses, kl_losses = [], [], []
-    best_loss = float("inf")
-    best_snapshot = None
-    epochs_no_improve = 0
-
-    for epoch in range(epochs):
-        idx = vae.rng.permutation(len(X))
-        X_shuffled = X[idx]
-        ep_total, ep_recon, ep_kl = 0.0, 0.0, 0.0
-        n_batches = 0
-
-        for start in range(0, len(X), batch_size):
-            batch = X_shuffled[start:start + batch_size]
-            out = vae.forward(batch)
-            N = batch.shape[0]
-            recon = np.sum((out - batch) ** 2) / N
-            kl = vae.kl_divergence(vae._mu, vae._logvar)
-            total = recon + kl
-
-            ep_recon += recon
-            ep_kl += kl
-            ep_total += total
-
-            dW, db = vae._compute_grads(batch)
-            if optimizer == "adam":
-                vae._apply_adam(dW, db, lr)
-            else:
-                vae._apply_sgd(dW, db, lr)
-            n_batches += 1
-
-        mean_total = ep_total / n_batches
-        mean_recon = ep_recon / n_batches
-        mean_kl = ep_kl / n_batches
-
-        total_losses.append(mean_total)
-        recon_losses.append(mean_recon)
-        kl_losses.append(mean_kl)
-
-        if mean_total < best_loss - min_delta:
-            best_loss = mean_total
-            best_snapshot = vae._snapshot()
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
-
-        if log_every and (epoch + 1) % log_every == 0:
-            print(f"  Epoch {epoch+1}/{epochs} | total={mean_total:.6f} "
-                  f"recon={mean_recon:.6f} KL={mean_kl:.6f}")
-
-        if patience is not None and epochs_no_improve >= patience:
-            print(f"  Early stop at epoch {epoch+1} (best={best_loss:.6f})")
-            break
-
-    if best_snapshot is not None:
-        vae._restore(best_snapshot)
-
-    return total_losses, recon_losses, kl_losses
-
 
 def train_and_evaluate(X, cfg, seed):
     """Train one VAE with given config and seed, return metrics."""
@@ -107,9 +41,10 @@ def train_and_evaluate(X, cfg, seed):
         cfg["layer_dims"],
         activation=cfg.get("activation", "relu"),
         seed=seed,
+        recon_loss=cfg.get("recon_loss", "mse"),
     )
-    total, recon, kl = train_vae_with_logging(
-        vae, X, cfg["epochs"], cfg["lr"],
+    total, recon, kl = vae.train(
+        X, cfg["epochs"], cfg["lr"],
         batch_size=cfg.get("batch_size", 20),
         log_every=cfg.get("log_every", 500),
         patience=cfg.get("patience"),
@@ -514,6 +449,7 @@ def main():
         "activation": best_cfg.get("activation", "relu"),
         "seed": 42,
         "batch_size": best_cfg.get("batch_size", 20),
+        "recon_loss": best_cfg.get("recon_loss", "mse"),
         "is_color": is_color,
         "criterion": ("latent_dim=2 for 2-D visualizations, since it best supports "
                       "the latent-space and traversal plots, noting the "

@@ -13,7 +13,8 @@ class VariationalAutoencoder(Autoencoder):
     Standard VAE loss = recon + KL (Kingma & Welling, 2014).
     """
 
-    def __init__(self, layer_dims, activation, seed=None):
+    def __init__(self, layer_dims, activation, seed=None, recon_loss="mse"):
+        self.recon_loss = recon_loss
         super().__init__(layer_dims, activation, seed)
 
     # Weight initialisation                                              #
@@ -97,7 +98,12 @@ class VariationalAutoencoder(Autoencoder):
 
     def _loss(self, out, batch):
         N = batch.shape[0]
-        recon = np.sum((out - batch) ** 2) / N
+        if self.recon_loss == "bce":
+            eps = 1e-8
+            recon = -np.sum(batch * np.log(out + eps)
+                            + (1 - batch) * np.log(1 - out + eps)) / N
+        else:
+            recon = np.sum((out - batch) ** 2) / N
         return recon + self.kl_divergence(self._mu, self._logvar)
 
     # Backward (recon + KL)                                   #
@@ -108,7 +114,12 @@ class VariationalAutoencoder(Autoencoder):
         db = [None] * len(self.biases)
 
         # out -> z_sample
-        delta = 2 * (self._dec_a[-1] - y_true) * sigmoid_grad(self._dec_z[-1])
+        if self.recon_loss == "bce":
+            # BCE + sigmoid: d(loss)/d(z) = (out - y), no sigmoid_grad needed
+            delta = self._dec_a[-1] - y_true
+        else:
+            # MSE + sigmoid
+            delta = 2 * (self._dec_a[-1] - y_true) * sigmoid_grad(self._dec_z[-1])
         dz = None
         for local in reversed(range(n - self.dec_start)):
             gi = self.dec_start + local
@@ -145,3 +156,75 @@ class VariationalAutoencoder(Autoencoder):
     def backward(self, y_true, lr):
         dW, db = self._compute_grads(y_true)
         self._apply_sgd(dW, db, lr)
+
+    # Training                                                             #
+    def _recon_loss(self, out, batch):
+        """Compute reconstruction loss (without KL) for a single batch."""
+        N = batch.shape[0]
+        if self.recon_loss == "bce":
+            eps = 1e-8
+            return -np.sum(batch * np.log(out + eps)
+                           + (1 - batch) * np.log(1 - out + eps)) / N
+        return np.sum((out - batch) ** 2) / N
+
+    def train(self, X, epochs, lr, batch_size, log_every=100,
+              optimizer="adam", patience=None, min_delta=1e-6):
+        """Train the VAE and return (total, recon, kl) loss lists per epoch."""
+        if optimizer == "adam":
+            self._init_adam_state()
+
+        total_losses, recon_losses, kl_losses = [], [], []
+        best_loss = float("inf")
+        best_snapshot = None
+        epochs_no_improve = 0
+
+        for epoch in range(epochs):
+            idx = self.rng.permutation(len(X))
+            X_shuffled = X[idx]
+            ep_total, ep_recon, ep_kl = 0.0, 0.0, 0.0
+            n_batches = 0
+
+            for start in range(0, len(X), batch_size):
+                batch = X_shuffled[start:start + batch_size]
+                out = self.forward(batch)
+
+                recon = self._recon_loss(out, batch)
+                kl = self.kl_divergence(self._mu, self._logvar)
+                ep_recon += recon
+                ep_kl += kl
+                ep_total += recon + kl
+
+                dW, db = self._compute_grads(batch)
+                if optimizer == "adam":
+                    self._apply_adam(dW, db, lr)
+                else:
+                    self._apply_sgd(dW, db, lr)
+                n_batches += 1
+
+            mean_total = ep_total / n_batches
+            mean_recon = ep_recon / n_batches
+            mean_kl = ep_kl / n_batches
+
+            total_losses.append(mean_total)
+            recon_losses.append(mean_recon)
+            kl_losses.append(mean_kl)
+
+            if mean_total < best_loss - min_delta:
+                best_loss = mean_total
+                best_snapshot = self._snapshot()
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+
+            if log_every and (epoch + 1) % log_every == 0:
+                print(f"  Epoch {epoch+1}/{epochs} | total={mean_total:.6f} "
+                      f"recon={mean_recon:.6f} KL={mean_kl:.6f}")
+
+            if patience is not None and epochs_no_improve >= patience:
+                print(f"  Early stop at epoch {epoch+1} (best={best_loss:.6f})")
+                break
+
+        if best_snapshot is not None:
+            self._restore(best_snapshot)
+
+        return total_losses, recon_losses, kl_losses
