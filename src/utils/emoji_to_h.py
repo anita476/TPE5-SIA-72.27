@@ -38,7 +38,35 @@ EMOJIS = [
     "\U0001F631",  # face screaming in fear
     "\U0001F634",  # sleeping face
     "\U0001F61C",  # winking face with tongue
-    "\U0001F914",  # thinking face
+    "\U0001F914",  # thinking face,
+    "\U0001F923",  # rolling on the floor laughing
+    "\U0001F607",  # smiling face with halo
+    "\U0001F970",  # smiling face with hearts
+    "\U0001F618",  # face blowing a kiss
+    "\U0001F617",  # kissing face
+    "\U0001F928",  # face with raised eyebrow
+    "\U0001F610",  # neutral face
+    "\U0001F611",  # expressionless face
+    "\U0001F615",  # confused face
+    "\U0001F644",  # face with rolling eyes
+    "\U0001F623",  # persevering face
+    "\U0001F625",  # sad but relieved face
+    "\U0001F643",  # upside-down face
+    "\U0001F973",  # partying face
+    "\U0001F929",  # star-struck
+    "\U0001F92A",  # zany face
+    "\U0001F60B",  # face savoring food
+    "\U0001F61B",  # face with tongue
+    "\U0001F61D",  # squinting face with tongue
+    "\U0001F612",  # unamused face
+    "\U0001F613",  # downcast face with sweat
+    "\U0001F614",  # pensive face
+    "\U0001F616",  # confounded face
+    "\U0001F61F",  # worried face
+    "\U0001F621",  # pouting face
+    "\U0001F624",  # face with steam from nose
+    "\U0001F62C",  # grimacing face
+    "\U0001F633",  # flushed face
 ]
 
 
