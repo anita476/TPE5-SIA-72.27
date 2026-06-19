@@ -50,7 +50,8 @@ def train_and_evaluate(X, cfg, seed):
     latent = vae.encode(X)
     recon_out = vae.decode(latent)
     recon_mse = np.mean((recon_out - X) ** 2)
-    final_kl = kl[-1] if kl else 0.0
+    vae.forward(X)
+    final_kl = float(vae.kl_divergence(vae._mu, vae._logvar))
     return {
         "recon_mse": recon_mse,
         "final_kl": final_kl,
