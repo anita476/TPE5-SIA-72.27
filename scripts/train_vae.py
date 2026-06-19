@@ -7,10 +7,7 @@ Produces:
   output/vae_latent_dim_sweep.png   -- recon MSE vs latent dim with error bars
   output/vae_arch_sweep.png         -- recon MSE per architecture with error bars
   output/vae_arch_tuning_table.txt  -- all configs with mean +/- std
-  output/vae_loss_curves.png        -- total / recon / KL vs epoch (best config)
-  output/vae_latent_scatter_*.png   -- 2-D latent scatter
-  output/vae_vs_ae_latent_*.png     -- side-by-side AE vs VAE
-  output/vae_reconstructions.png    -- original vs reconstructed
+  output/vae_configs/<name>/        -- per-config: loss curves, reconstructions, latent scatter
   output/best_vae_config.json       -- chosen config for generate_vae.py
 """
 from __future__ import annotations
@@ -34,7 +31,6 @@ from autoencoders.SimpleAutoencoder import SimpleAutoencoder
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
-
 def train_and_evaluate(X, cfg, seed):
     """Train one VAE with given config and seed, return metrics."""
     vae = VariationalAutoencoder(
@@ -49,7 +45,6 @@ def train_and_evaluate(X, cfg, seed):
         log_every=cfg.get("log_every", 500),
         patience=cfg.get("patience"),
     )
-    # Evaluate: encode -> decode -> MSE
     latent = vae.encode(X)
     recon_out = vae.decode(latent)
     recon_mse = np.mean((recon_out - X) ** 2)
@@ -65,7 +60,9 @@ def train_and_evaluate(X, cfg, seed):
 
 # -- plotting ----------------------------------------------------------------
 
-def plot_loss_curves(total, recon, kl, title_extra="", filename="vae_loss_curves.png"):
+def plot_loss_curves(total, recon, kl, title_extra="", out_dir=None,
+                     filename="loss_curves.png"):
+    out_dir = out_dir or OUT_DIR
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
     axes[0].plot(total, linewidth=0.8, color="steelblue")
@@ -82,7 +79,7 @@ def plot_loss_curves(total, recon, kl, title_extra="", filename="vae_loss_curves
 
     fig.suptitle(f"VAE Training Curves {title_extra}", fontsize=11)
     plt.tight_layout()
-    path = os.path.join(OUT_DIR, filename)
+    path = os.path.join(out_dir, filename)
     plt.savefig(path, dpi=150)
     plt.close(fig)
     return path
@@ -119,8 +116,10 @@ def _add_latent_dots(ax, latent, labels):
                     xytext=(0, 6), textcoords="offset points")
 
 
-def plot_latent_scatter(latent, labels, title, filename,
+def plot_latent_scatter(latent, labels, title, out_dir=None,
+                        filename="latent_scatter.png",
                         bitmaps_bw=None, bitmaps_color=None, mode="bw"):
+    out_dir = out_dir or OUT_DIR
     fig, ax = plt.subplots(figsize=(10, 9))
     if mode == "color" and bitmaps_color is not None:
         _add_latent_images(ax, latent, bitmaps_color, zoom=1.5)
@@ -132,7 +131,7 @@ def plot_latent_scatter(latent, labels, title, filename,
     ax.set_xlabel("z1"); ax.set_ylabel("z2")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    path = os.path.join(OUT_DIR, filename)
+    path = os.path.join(out_dir, filename)
     plt.savefig(path, dpi=150)
     plt.close(fig)
     return path
@@ -140,7 +139,9 @@ def plot_latent_scatter(latent, labels, title, filename,
 
 def plot_latent_comparison(latent_vae, latent_ae, labels,
                            bitmaps_bw=None, bitmaps_color=None,
-                           filename="vae_vs_ae_latent.png", mode="bw"):
+                           out_dir=None, filename="vae_vs_ae_latent.png",
+                           mode="bw"):
+    out_dir = out_dir or OUT_DIR
     fig, axes = plt.subplots(1, 2, figsize=(20, 10))
     for ax, latent, title in [
         (axes[0], latent_ae, "Plain Autoencoder - Latent Space"),
@@ -156,7 +157,7 @@ def plot_latent_comparison(latent_vae, latent_ae, labels,
         ax.set_xlabel("z1"); ax.set_ylabel("z2")
         ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    path = os.path.join(OUT_DIR, filename)
+    path = os.path.join(out_dir, filename)
     plt.savefig(path, dpi=200)
     plt.close(fig)
     return path
@@ -170,8 +171,10 @@ def _imshow_emoji(ax, flat, is_color=False):
         ax.imshow(flat.reshape(20, 20), cmap="gray_r", vmin=0, vmax=1)
 
 
-def plot_reconstructions(X, model, labels, filename="vae_reconstructions.png",
-                         is_color=False):
+def plot_reconstructions(X, model, labels, out_dir=None,
+                         filename="reconstructions.png", is_color=False,
+                         title="VAE Reconstructions"):
+    out_dir = out_dir or OUT_DIR
     latent = model.encode(X)
     recon = model.decode(latent)
     n = len(X)
@@ -188,12 +191,53 @@ def plot_reconstructions(X, model, labels, filename="vae_reconstructions.png",
         axes[1, i].set_xticks([]); axes[1, i].set_yticks([])
         if i == 0:
             axes[1, i].set_ylabel("Reconstructed", fontsize=9)
-    fig.suptitle("VAE Reconstructions", fontsize=11)
+    fig.suptitle(title, fontsize=11)
     plt.tight_layout()
-    path = os.path.join(OUT_DIR, filename)
+    path = os.path.join(out_dir, filename)
     plt.savefig(path, dpi=150)
     plt.close(fig)
     return path
+
+
+def _config_dir_name(layer_dims):
+    """Create a short folder name from layer_dims, e.g. '400_128_2_128_400'."""
+    return "_".join(str(d) for d in layer_dims)
+
+
+def generate_per_config_plots(vae, losses, cfg, X, labels,
+                               bitmaps_bw, bitmaps_color, is_color, prefix=""):
+    """Generate loss curves, reconstructions, and latent scatter for one config."""
+    dims = cfg["layer_dims"]
+    latent_dim = dims[len(dims) // 2]
+    dir_name = _config_dir_name(dims)
+    config_dir = os.path.join(OUT_DIR, f"{prefix}vae_configs", dir_name)
+    os.makedirs(config_dir, exist_ok=True)
+
+    total, recon, kl = losses
+    arch_str = str(dims)
+
+    # Loss curves
+    plot_loss_curves(total, recon, kl,
+                     title_extra=f"(arch={arch_str})",
+                     out_dir=config_dir)
+
+    # Reconstructions
+    plot_reconstructions(X, vae, labels, out_dir=config_dir,
+                         is_color=is_color,
+                         title=f"VAE Reconstructions (arch={arch_str})")
+
+    # Latent scatter (only for 2-D latent)
+    if latent_dim == 2:
+        latent = vae.encode(X)
+        for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
+            plot_latent_scatter(latent, labels,
+                                f"VAE Latent Space (arch={arch_str})",
+                                out_dir=config_dir,
+                                filename=f"latent_scatter{suffix}.png",
+                                bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
+                                mode=mode)
+
+    print(f"    Per-config plots -> {config_dir}/")
 
 
 # -- sweep logic -------------------------------------------------------------
@@ -204,7 +248,8 @@ def load_sweep_configs(config_path: str) -> dict:
     return raw
 
 
-def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name):
+def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name,
+                  labels, bitmaps_bw, bitmaps_color, is_color, prefix=""):
     """Run one sweep axis: for each config, train over all seeds.
     Returns list of dicts with mean/std metrics.
     """
@@ -243,6 +288,10 @@ def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name):
         })
         print(f"    => MSE: {results[-1]['mse_mean']:.6f} +/- {results[-1]['mse_std']:.6f}  "
               f"KL: {results[-1]['kl_mean']:.4f} +/- {results[-1]['kl_std']:.4f}")
+
+        # Generate per-config plots
+        generate_per_config_plots(best_vae, best_losses, cfg, X, labels,
+                                   bitmaps_bw, bitmaps_color, is_color, prefix)
 
     return results
 
@@ -344,7 +393,8 @@ def main():
     # ---- Sweep A: Latent dimension ----------------------------------------
     print("\n=== Sweep A: Latent Dimension ===")
     latent_configs = raw["latent_dim_sweep"]["configs"]
-    latent_results = run_one_sweep(X, latent_configs, shared, seeds, "latent_dim")
+    latent_results = run_one_sweep(X, latent_configs, shared, seeds, "latent_dim",
+                                   labels, bitmaps_bw, bitmaps_color, is_color, prefix)
 
     latent_dims = [r["config"]["layer_dims"][len(r["config"]["layer_dims"]) // 2]
                    for r in latent_results]
@@ -362,7 +412,8 @@ def main():
     # ---- Sweep B: Architecture (depth/width) ------------------------------
     print("\n=== Sweep B: Depth/Width ===")
     arch_configs = raw["arch_sweep"]["configs"]
-    arch_results = run_one_sweep(X, arch_configs, shared, seeds, "architecture")
+    arch_results = run_one_sweep(X, arch_configs, shared, seeds, "architecture",
+                                 labels, bitmaps_bw, bitmaps_color, is_color, prefix)
 
     p = plot_sweep_errorbar(
         arch_results,
@@ -389,57 +440,42 @@ def main():
 
     best_cfg = best["config"]
     best_vae = best["best_vae"]
-    best_total, best_recon, best_kl = best["best_losses"]
 
     print(f"\nBest 2-D config: {best_cfg['layer_dims']} "
           f"(MSE={best['mse_mean']:.6f} +/- {best['mse_std']:.6f})")
 
-    # ---- Loss curves for best model ----------------------------------------
-    p = plot_loss_curves(
-        best_total, best_recon, best_kl,
-        title_extra=f"(arch={best_cfg['layer_dims']})",
-        filename=f"{prefix}vae_loss_curves.png"
-    )
-    print(f"Loss curves -> {p}")
-
-    # ---- Reconstructions ---------------------------------------------------
-    p = plot_reconstructions(X, best_vae, labels,
-                             filename=f"{prefix}vae_reconstructions.png",
-                             is_color=is_color)
-    print(f"Reconstructions -> {p}")
-
-    # ---- VAE latent scatter (3 variants) -----------------------------------
-    latent_vae = best_vae.encode(X)
-    for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
-        p = plot_latent_scatter(latent_vae, labels,
-                                f"VAE Latent Space (arch={best_cfg['layer_dims']})",
-                                f"{prefix}vae_latent_scatter{suffix}.png",
-                                bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
-                                mode=mode)
-        print(f"VAE latent ({mode}) -> {p}")
-
-    # ---- Plain AE for comparison -------------------------------------------
+    # ---- Plain AE for comparison (best 2-D config only) --------------------
     print("\nTraining plain AE for latent space comparison...")
-    ae = SimpleAutoencoder(best_cfg["layer_dims"], activation="relu", seed=42)
-    ae.train(X, epochs=3000, lr=1e-3, batch_size=20, log_every=500,
-             optimizer="adam", patience=500)
+    ae = SimpleAutoencoder(best_cfg["layer_dims"],
+                           activation="tanh", seed=42)
+    ae.train(X, epochs=shared["epochs"], lr=shared["lr"],
+             batch_size=shared.get("batch_size", 20), log_every=shared.get("log_every", 500),
+             optimizer=shared.get("optimizer", "adam"),
+             patience=shared.get("patience"))
 
+    latent_vae = best_vae.encode(X)
     latent_ae = ae.encode(X)
-    for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
-        p = plot_latent_scatter(latent_ae, labels,
-                                "Plain AE Latent Space",
-                                f"{prefix}ae_latent_scatter{suffix}.png",
-                                bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
-                                mode=mode)
-        print(f"AE latent ({mode}) -> {p}")
 
-    # ---- Side-by-side comparison -------------------------------------------
+    # AE-only plots in best config's folder
+    best_dir = os.path.join(OUT_DIR, f"{prefix}vae_configs",
+                            _config_dir_name(best_cfg["layer_dims"]))
+    os.makedirs(best_dir, exist_ok=True)
+
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
-        p = plot_latent_comparison(latent_vae, latent_ae, labels,
-                                   bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
-                                   filename=f"{prefix}vae_vs_ae_latent{suffix}.png",
-                                   mode=mode)
-        print(f"Comparison ({mode}) -> {p}")
+        plot_latent_scatter(latent_ae, labels,
+                            "Plain AE Latent Space",
+                            out_dir=best_dir,
+                            filename=f"ae_latent_scatter{suffix}.png",
+                            bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
+                            mode=mode)
+
+    for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
+        plot_latent_comparison(latent_vae, latent_ae, labels,
+                               bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
+                               out_dir=best_dir,
+                               filename=f"vae_vs_ae_latent{suffix}.png",
+                               mode=mode)
+    print(f"AE comparison plots -> {best_dir}/")
 
     # ---- Save best config --------------------------------------------------
     cfg_out = {
