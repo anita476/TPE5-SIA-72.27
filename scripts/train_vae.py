@@ -1,13 +1,17 @@
 """train_vae.py
-Train a Variational Autoencoder on the B&W emoji dataset (20x20).
+Train a standard Variational Autoencoder on the B&W emoji dataset (20x20).
+
+Architecture sweep with multi-seed reporting (mean +/- std).
 
 Produces:
-  output/vae_loss_curves.png        — total / recon / KL vs epoch
-  output/vae_latent_scatter.png     — 2-D latent scatter (VAE)
-  output/ae_latent_scatter.png      — 2-D latent scatter (plain AE, for comparison)
-  output/vae_vs_ae_latent.png       — side-by-side comparison
-  output/vae_reconstructions.png    — original vs reconstructed for all emojis
-  output/vae_tuning_table.txt       — hyperparameter sweep results
+  output/vae_latent_dim_sweep.png   -- recon MSE vs latent dim with error bars
+  output/vae_arch_sweep.png         -- recon MSE per architecture with error bars
+  output/vae_arch_tuning_table.txt  -- all configs with mean +/- std
+  output/vae_loss_curves.png        -- total / recon / KL vs epoch (best config)
+  output/vae_latent_scatter_*.png   -- 2-D latent scatter
+  output/vae_vs_ae_latent_*.png     -- side-by-side AE vs VAE
+  output/vae_reconstructions.png    -- original vs reconstructed
+  output/best_vae_config.json       -- chosen config for generate_vae.py
 """
 from __future__ import annotations
 
@@ -30,7 +34,7 @@ from autoencoders.SimpleAutoencoder import SimpleAutoencoder
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# -- helpers -----------------------------------------------------------------
 
 def train_vae_with_logging(vae, X, epochs, lr, batch_size, optimizer="adam",
                            log_every=100, patience=None, min_delta=1e-6):
@@ -55,7 +59,7 @@ def train_vae_with_logging(vae, X, epochs, lr, batch_size, optimizer="adam",
             N = batch.shape[0]
             recon = np.sum((out - batch) ** 2) / N
             kl = vae.kl_divergence(vae._mu, vae._logvar)
-            total = recon + vae.beta * kl
+            total = recon + kl
 
             ep_recon += recon
             ep_kl += kl
@@ -97,11 +101,40 @@ def train_vae_with_logging(vae, X, epochs, lr, batch_size, optimizer="adam",
     return total_losses, recon_losses, kl_losses
 
 
+def train_and_evaluate(X, cfg, seed):
+    """Train one VAE with given config and seed, return metrics."""
+    vae = VariationalAutoencoder(
+        cfg["layer_dims"],
+        activation=cfg.get("activation", "relu"),
+        seed=seed,
+    )
+    total, recon, kl = train_vae_with_logging(
+        vae, X, cfg["epochs"], cfg["lr"],
+        batch_size=cfg.get("batch_size", 20),
+        log_every=cfg.get("log_every", 500),
+        patience=cfg.get("patience"),
+    )
+    # Evaluate: encode -> decode -> MSE
+    latent = vae.encode(X)
+    recon_out = vae.decode(latent)
+    recon_mse = np.mean((recon_out - X) ** 2)
+    final_kl = kl[-1] if kl else 0.0
+    return {
+        "recon_mse": recon_mse,
+        "final_kl": final_kl,
+        "vae": vae,
+        "losses": (total, recon, kl),
+        "n_epochs": len(total),
+    }
+
+
+# -- plotting ----------------------------------------------------------------
+
 def plot_loss_curves(total, recon, kl, title_extra="", filename="vae_loss_curves.png"):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
     axes[0].plot(total, linewidth=0.8, color="steelblue")
-    axes[0].set_title("Total Loss (recon + beta*KL)")
+    axes[0].set_title("Total Loss (recon + KL)")
     axes[0].set_xlabel("Epoch"); axes[0].set_ylabel("Loss"); axes[0].grid(True, alpha=0.3)
 
     axes[1].plot(recon, linewidth=0.8, color="darkorange")
@@ -121,7 +154,6 @@ def plot_loss_curves(total, recon, kl, title_extra="", filename="vae_loss_curves
 
 
 def _set_latent_limits(ax, latent, margin_frac=0.15):
-    """Set axis limits with padding proportional to the data range."""
     for dim, setter in [(0, ax.set_xlim), (1, ax.set_ylim)]:
         lo, hi = latent[:, dim].min(), latent[:, dim].max()
         span = hi - lo if hi > lo else 1.0
@@ -130,7 +162,6 @@ def _set_latent_limits(ax, latent, margin_frac=0.15):
 
 
 def _add_latent_images(ax, latent, bitmaps, zoom, cmap=None):
-    """Place bitmap thumbnails at latent coordinates."""
     from matplotlib.offsetbox import OffsetImage, AnnotationBbox
     _set_latent_limits(ax, latent, margin_frac=0.20)
     for i in range(len(latent)):
@@ -145,7 +176,6 @@ def _add_latent_images(ax, latent, bitmaps, zoom, cmap=None):
 
 
 def _add_latent_dots(ax, latent, labels):
-    """Colored dots with text labels."""
     ax.scatter(latent[:, 0], latent[:, 1],
                c=np.arange(len(latent)), cmap="tab20", s=100, zorder=3)
     for i, lbl in enumerate(labels):
@@ -156,18 +186,13 @@ def _add_latent_dots(ax, latent, labels):
 
 def plot_latent_scatter(latent, labels, title, filename,
                         bitmaps_bw=None, bitmaps_color=None, mode="bw"):
-    """Plot a single latent scatter.
-    mode: 'dots', 'bw', or 'color'.
-    """
     fig, ax = plt.subplots(figsize=(10, 9))
-
     if mode == "color" and bitmaps_color is not None:
         _add_latent_images(ax, latent, bitmaps_color, zoom=1.5)
     elif mode == "bw" and bitmaps_bw is not None:
         _add_latent_images(ax, latent, bitmaps_bw, zoom=1.5, cmap="gray_r")
     else:
         _add_latent_dots(ax, latent, labels)
-
     ax.set_title(title, fontsize=12)
     ax.set_xlabel("z1"); ax.set_ylabel("z2")
     ax.grid(True, alpha=0.3)
@@ -181,11 +206,7 @@ def plot_latent_scatter(latent, labels, title, filename,
 def plot_latent_comparison(latent_vae, latent_ae, labels,
                            bitmaps_bw=None, bitmaps_color=None,
                            filename="vae_vs_ae_latent.png", mode="bw"):
-    """Side-by-side AE vs VAE latent scatter.
-    mode: 'dots', 'bw', or 'color'.
-    """
     fig, axes = plt.subplots(1, 2, figsize=(20, 10))
-
     for ax, latent, title in [
         (axes[0], latent_ae, "Plain Autoencoder - Latent Space"),
         (axes[1], latent_vae, "Variational Autoencoder - Latent Space"),
@@ -199,7 +220,6 @@ def plot_latent_comparison(latent_vae, latent_ae, labels,
         ax.set_title(title, fontsize=12)
         ax.set_xlabel("z1"); ax.set_ylabel("z2")
         ax.grid(True, alpha=0.3)
-
     plt.tight_layout()
     path = os.path.join(OUT_DIR, filename)
     plt.savefig(path, dpi=200)
@@ -208,7 +228,6 @@ def plot_latent_comparison(latent_vae, latent_ae, labels,
 
 
 def _imshow_emoji(ax, flat, is_color=False):
-    """Display a single flattened emoji (B&W or RGB)."""
     if is_color:
         img = np.clip(flat.reshape(20, 20, 3), 0, 1)
         ax.imshow(img)
@@ -221,23 +240,19 @@ def plot_reconstructions(X, model, labels, filename="vae_reconstructions.png",
     latent = model.encode(X)
     recon = model.decode(latent)
     n = len(X)
-
     fig, axes = plt.subplots(2, n, figsize=(1.5 * n, 3.2))
     if n == 1:
         axes = axes.reshape(2, 1)
-
     for i in range(n):
         _imshow_emoji(axes[0, i], X[i], is_color)
         axes[0, i].set_xticks([]); axes[0, i].set_yticks([])
         axes[0, i].set_title(labels[i], fontsize=7)
         if i == 0:
             axes[0, i].set_ylabel("Original", fontsize=9)
-
         _imshow_emoji(axes[1, i], recon[i], is_color)
         axes[1, i].set_xticks([]); axes[1, i].set_yticks([])
         if i == 0:
             axes[1, i].set_ylabel("Reconstructed", fontsize=9)
-
     fig.suptitle("VAE Reconstructions", fontsize=11)
     plt.tight_layout()
     path = os.path.join(OUT_DIR, filename)
@@ -246,109 +261,122 @@ def plot_reconstructions(X, model, labels, filename="vae_reconstructions.png",
     return path
 
 
-# ── tuning sweep ─────────────────────────────────────────────────────────────
+# -- sweep logic -------------------------------------------------------------
 
-def load_sweep_configs(config_path: str) -> tuple[list[dict], dict]:
-    """Load sweep configurations from a JSON file.
-
-    Expected format:
-        { "sweep": [ {per-run overrides}, ... ],
-          "shared": {defaults applied to every run} }
-    """
+def load_sweep_configs(config_path: str) -> dict:
     with open(config_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-
-    shared = raw.get("shared", {})
-    sweep = raw.get("sweep", [])
-    if not sweep:
-        raise ValueError(f"No 'sweep' entries found in {config_path}")
-
-    configs = []
-    for entry in sweep:
-        merged = {**shared, **entry}
-        configs.append(merged)
-
-    return configs, shared
+    return raw
 
 
-def run_sweep(X_bw, labels, config_path: str | None = None):
-    """Hyperparameter sweep; loads configs from JSON if provided."""
-    default_config_path = os.path.join(
-        os.path.dirname(__file__), "..", "configs", "vae_sweep.json"
-    )
-    path = config_path or default_config_path
-
-    configs, shared = load_sweep_configs(path)
-    print(f"Loaded {len(configs)} sweep configs from {path}")
-
+def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name):
+    """Run one sweep axis: for each config, train over all seeds.
+    Returns list of dicts with mean/std metrics.
+    """
     results = []
-    for i, cfg in enumerate(configs):
-        print(f"\n--- Sweep {i+1}/{len(configs)}: {cfg} ---")
-        vae = VariationalAutoencoder(
-            cfg["layer_dims"],
-            activation=cfg.get("activation", "relu"),
-            seed=cfg.get("seed", 42),
-            beta=cfg.get("beta", 1.0),
-        )
-        total, recon, kl = train_vae_with_logging(
-            vae, X_bw, cfg["epochs"], cfg["lr"],
-            batch_size=cfg.get("batch_size", 20),
-            log_every=cfg.get("log_every", 500),
-            patience=cfg.get("patience"),
-        )
+    for i, cfg_overrides in enumerate(sweep_configs):
+        cfg = {**shared, **cfg_overrides}
+        label = str(cfg["layer_dims"])
+        print(f"\n  Config {i+1}/{len(sweep_configs)}: {label}")
 
-        # evaluate
-        latent = vae.encode(X_bw)
-        recon_out = vae.decode(latent)
-        recon_err = np.mean((recon_out - X_bw) ** 2)
-        final_kl = kl[-1] if kl else 0
-        final_total = total[-1] if total else 0
+        mses, kls = [], []
+        best_vae = None
+        best_mse = float("inf")
+        best_losses = None
+
+        for seed in seeds:
+            print(f"    seed={seed} ...", end=" ", flush=True)
+            res = train_and_evaluate(X, cfg, seed)
+            mses.append(res["recon_mse"])
+            kls.append(res["final_kl"])
+            print(f"MSE={res['recon_mse']:.6f} KL={res['final_kl']:.4f}")
+            if res["recon_mse"] < best_mse:
+                best_mse = res["recon_mse"]
+                best_vae = res["vae"]
+                best_losses = res["losses"]
 
         results.append({
             "config": cfg,
-            "final_total": final_total,
-            "final_recon": recon_err,
-            "final_kl": final_kl,
-            "n_epochs": len(total),
-            "vae": vae,
-            "losses": (total, recon, kl),
+            "label": label,
+            "mse_mean": np.mean(mses),
+            "mse_std": np.std(mses),
+            "kl_mean": np.mean(kls),
+            "kl_std": np.std(kls),
+            "n_seeds": len(seeds),
+            "best_vae": best_vae,
+            "best_losses": best_losses,
         })
-        print(f"  Final: total={final_total:.6f} recon_mse={recon_err:.6f} KL={final_kl:.6f}")
+        print(f"    => MSE: {results[-1]['mse_mean']:.6f} +/- {results[-1]['mse_std']:.6f}  "
+              f"KL: {results[-1]['kl_mean']:.4f} +/- {results[-1]['kl_std']:.4f}")
 
     return results
 
 
-def write_tuning_table(results, filename="vae_tuning_table.txt"):
+def plot_sweep_errorbar(results, x_label, title, filename, x_values=None):
+    """Generic error-bar plot for a sweep axis."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+    means = [r["mse_mean"] for r in results]
+    stds = [r["mse_std"] for r in results]
+
+    if x_values is not None:
+        ax.errorbar(x_values, means, yerr=stds, fmt="o-", capsize=5,
+                    color="steelblue", markersize=8)
+        ax.set_xticks(x_values)
+    else:
+        x = range(len(results))
+        ax.errorbar(x, means, yerr=stds, fmt="o-", capsize=5,
+                    color="steelblue", markersize=8)
+        ax.set_xticks(x)
+        ax.set_xticklabels([r["label"] for r in results], fontsize=8, rotation=15)
+
+    ax.set_xlabel(x_label, fontsize=11)
+    ax.set_ylabel("Reconstruction MSE", fontsize=11)
+    ax.set_title(title, fontsize=11)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(OUT_DIR, filename)
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def write_tuning_table(all_results, shared, seeds, filename="vae_arch_tuning_table.txt"):
     path = os.path.join(OUT_DIR, filename)
     lines = []
-    lines.append(f"{'#':>2}  {'Architecture':<30}  {'Beta':>5}  {'LR':>6}  "
-                 f"{'Epochs':>6}  {'Recon':>8}  {'KL':>8}  {'Total':>8}")
-    lines.append("-" * 95)
+    lines.append(f"{'#':>2}  {'Architecture':<40}  {'Recon MSE':>18}  "
+                 f"{'KL':>18}  {'Seeds':>5}")
+    lines.append("-" * 100)
 
-    for i, r in enumerate(results):
-        c = r["config"]
+    for i, r in enumerate(all_results):
         lines.append(
-            f"{i+1:>2}  {str(c['layer_dims']):<30}  {c['beta']:>5.1f}  {c['lr']:>6.4f}  "
-            f"{r['n_epochs']:>6}  {r['final_recon']:>8.4f}  {r['final_kl']:>8.4f}  "
-            f"{r['final_total']:>8.4f}"
+            f"{i+1:>2}  {r['label']:<40}  "
+            f"{r['mse_mean']:>8.6f} +/- {r['mse_std']:<7.6f}  "
+            f"{r['kl_mean']:>8.4f} +/- {r['kl_std']:<7.4f}  "
+            f"{r['n_seeds']:>5}"
         )
 
     table = "\n".join(lines)
+    header = (f"VAE Architecture Tuning Results (standard VAE, KL weight=1)\n"
+              f"Fixed: lr={shared['lr']}, epochs={shared['epochs']}, "
+              f"batch_size={shared['batch_size']}, optimizer={shared['optimizer']}, "
+              f"activation={shared['activation']}\n"
+              f"Seeds: {seeds}\n")
+
     with open(path, "w") as f:
-        f.write("VAE Hyperparameter Tuning Results\n")
-        f.write("=" * 95 + "\n")
+        f.write(header)
+        f.write("=" * 100 + "\n")
         f.write(table + "\n")
     print(f"\nTuning table saved to {path}")
     print(table)
     return path
 
 
-# ── main ─────────────────────────────────────────────────────────────────────
+# -- main --------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Train VAE on emoji dataset")
     parser.add_argument("--config", type=str, default=None,
-                        help="Path to sweep config JSON (default: configs/vae_sweep.json)")
+                        help="Path to sweep config JSON")
     parser.add_argument("--color", action="store_true",
                         help="Train on color (RGB 1200-dim) instead of B&W (400-dim)")
     args = parser.parse_args()
@@ -372,49 +400,90 @@ def main():
                                      "configs", "vae_sweep.json")
         print(f"  B&W mode: {len(labels)} emojis, X shape = {X.shape}")
 
-    # ── Step 1: Hyperparameter sweep ─────────────────────────────────────
-    print("\n=== Hyperparameter Sweep ===")
+    # Load config
     config_path = args.config or default_sweep
-    sweep_results = run_sweep(X, labels, config_path=config_path)
-    write_tuning_table(sweep_results, filename=f"{prefix}vae_tuning_table.txt")
+    raw = load_sweep_configs(config_path)
+    shared = raw["shared"]
+    seeds = raw["seeds"]
 
-    # Pick the best 2-D latent config by lowest reconstruction error
-    candidates_2d = [r for r in sweep_results if r["config"]["layer_dims"][2] == 2]
+    # ---- Sweep A: Latent dimension ----------------------------------------
+    print("\n=== Sweep A: Latent Dimension ===")
+    latent_configs = raw["latent_dim_sweep"]["configs"]
+    latent_results = run_one_sweep(X, latent_configs, shared, seeds, "latent_dim")
+
+    latent_dims = [r["config"]["layer_dims"][len(r["config"]["layer_dims"]) // 2]
+                   for r in latent_results]
+    p = plot_sweep_errorbar(
+        latent_results,
+        x_label="Latent Dimension",
+        title=(f"Reconstruction MSE vs Latent Dimension\n"
+               f"(body=[..., 128, L, 128, ...], lr={shared['lr']}, "
+               f"epochs={shared['epochs']}, n_seeds={len(seeds)})"),
+        filename=f"{prefix}vae_latent_dim_sweep.png",
+        x_values=latent_dims,
+    )
+    print(f"Latent dim sweep plot -> {p}")
+
+    # ---- Sweep B: Architecture (depth/width) ------------------------------
+    print("\n=== Sweep B: Depth/Width ===")
+    arch_configs = raw["arch_sweep"]["configs"]
+    arch_results = run_one_sweep(X, arch_configs, shared, seeds, "architecture")
+
+    p = plot_sweep_errorbar(
+        arch_results,
+        x_label="Architecture",
+        title=(f"Reconstruction MSE vs Architecture (latent_dim=2)\n"
+               f"(lr={shared['lr']}, epochs={shared['epochs']}, "
+               f"n_seeds={len(seeds)})"),
+        filename=f"{prefix}vae_arch_sweep.png",
+    )
+    print(f"Arch sweep plot -> {p}")
+
+    # ---- Tuning table (all results) ----------------------------------------
+    all_results = latent_results + arch_results
+    write_tuning_table(all_results, shared, seeds,
+                       filename=f"{prefix}vae_arch_tuning_table.txt")
+
+    # ---- Pick best 2-D config for downstream plots -------------------------
+    candidates_2d = [r for r in all_results
+                     if r["config"]["layer_dims"][len(r["config"]["layer_dims"]) // 2] == 2]
     if candidates_2d:
-        best_2d = min(candidates_2d, key=lambda r: r["final_recon"])
+        best = min(candidates_2d, key=lambda r: r["mse_mean"])
     else:
-        best_2d = min(sweep_results, key=lambda r: r["final_recon"])
-    best_cfg = best_2d["config"]
-    best_vae = best_2d["vae"]
-    best_total, best_recon, best_kl = best_2d["losses"]
+        best = min(all_results, key=lambda r: r["mse_mean"])
 
-    print(f"\nBest 2-D config: {best_cfg}")
+    best_cfg = best["config"]
+    best_vae = best["best_vae"]
+    best_total, best_recon, best_kl = best["best_losses"]
 
-    # ── Step 2: Loss curves for best model ───────────────────────────────
-    p1 = plot_loss_curves(
+    print(f"\nBest 2-D config: {best_cfg['layer_dims']} "
+          f"(MSE={best['mse_mean']:.6f} +/- {best['mse_std']:.6f})")
+
+    # ---- Loss curves for best model ----------------------------------------
+    p = plot_loss_curves(
         best_total, best_recon, best_kl,
-        title_extra=f"(beta={best_cfg['beta']})",
+        title_extra=f"(arch={best_cfg['layer_dims']})",
         filename=f"{prefix}vae_loss_curves.png"
     )
-    print(f"Loss curves -> {p1}")
+    print(f"Loss curves -> {p}")
 
-    # ── Step 3: Reconstructions ──────────────────────────────────────────
-    p2 = plot_reconstructions(X, best_vae, labels,
-                              filename=f"{prefix}vae_reconstructions.png",
-                              is_color=is_color)
-    print(f"Reconstructions -> {p2}")
+    # ---- Reconstructions ---------------------------------------------------
+    p = plot_reconstructions(X, best_vae, labels,
+                             filename=f"{prefix}vae_reconstructions.png",
+                             is_color=is_color)
+    print(f"Reconstructions -> {p}")
 
-    # ── Step 4: VAE latent scatter (3 variants) ─────────────────────────
+    # ---- VAE latent scatter (3 variants) -----------------------------------
     latent_vae = best_vae.encode(X)
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
         p = plot_latent_scatter(latent_vae, labels,
-                                f"VAE Latent Space (beta={best_cfg['beta']})",
+                                f"VAE Latent Space (arch={best_cfg['layer_dims']})",
                                 f"{prefix}vae_latent_scatter{suffix}.png",
                                 bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
                                 mode=mode)
         print(f"VAE latent ({mode}) -> {p}")
 
-    # ── Step 5: Plain AE for comparison ──────────────────────────────────
+    # ---- Plain AE for comparison -------------------------------------------
     print("\nTraining plain AE for latent space comparison...")
     ae = SimpleAutoencoder(best_cfg["layer_dims"], activation="relu", seed=42)
     ae.train(X, epochs=3000, lr=1e-3, batch_size=20, log_every=500,
@@ -429,7 +498,7 @@ def main():
                                 mode=mode)
         print(f"AE latent ({mode}) -> {p}")
 
-    # ── Step 6: Side-by-side comparison (3 variants) ─────────────────────
+    # ---- Side-by-side comparison -------------------------------------------
     for mode, suffix in [("dots", "_dots"), ("bw", "_bw"), ("color", "_color")]:
         p = plot_latent_comparison(latent_vae, latent_ae, labels,
                                    bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
@@ -437,16 +506,18 @@ def main():
                                    mode=mode)
         print(f"Comparison ({mode}) -> {p}")
 
-    # ── Save best model config ───────────────────────────────────────────
+    # ---- Save best config --------------------------------------------------
     cfg_out = {
         "layer_dims": best_cfg["layer_dims"],
-        "beta": best_cfg["beta"],
         "lr": best_cfg["lr"],
         "epochs": best_cfg["epochs"],
-        "activation": "relu",
+        "activation": best_cfg.get("activation", "relu"),
         "seed": 42,
-        "batch_size": 20,
+        "batch_size": best_cfg.get("batch_size", 20),
         "is_color": is_color,
+        "criterion": ("latent_dim=2 for 2-D visualizations, since it best supports "
+                      "the latent-space and traversal plots, noting the "
+                      "reconstruction tradeoff"),
     }
     cfg_path = os.path.join(OUT_DIR, f"{prefix}best_vae_config.json")
     with open(cfg_path, "w") as f:

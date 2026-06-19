@@ -214,13 +214,13 @@ def main():
         if is_color:
             cfg = {
                 "layer_dims": [1200, 256, 2, 256, 1200],
-                "beta": 0.5, "lr": 1e-3, "epochs": 3000,
+                "lr": 1e-3, "epochs": 3000,
                 "activation": "relu", "seed": 42, "batch_size": 20,
             }
         else:
             cfg = {
                 "layer_dims": [400, 128, 2, 128, 400],
-                "beta": 0.5, "lr": 1e-3, "epochs": 3000,
+                "lr": 1e-3, "epochs": 3000,
                 "activation": "relu", "seed": 42, "batch_size": 20,
             }
         print(f"No saved config found, using defaults")
@@ -229,7 +229,7 @@ def main():
     print("\nTraining VAE...")
     vae = VariationalAutoencoder(
         cfg["layer_dims"], activation=cfg["activation"],
-        seed=cfg["seed"], beta=cfg["beta"]
+        seed=cfg["seed"],
     )
     train_vae_with_logging(
         vae, X, cfg["epochs"], cfg["lr"],

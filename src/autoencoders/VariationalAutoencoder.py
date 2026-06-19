@@ -10,12 +10,11 @@ from autoencoders.Autoencoder import (
 class VariationalAutoencoder(Autoencoder):
     """Dense variational autoencoder, flat layout:
         [ enc_0 ... enc_{k-2} | W_mu | W_logvar | dec_0 ... dec_last ]
-    Loss = recon + beta * KL.
+    Standard VAE loss = recon + KL (Kingma & Welling, 2014).
     """
 
-    def __init__(self, layer_dims, activation, seed=None, beta=1):
+    def __init__(self, layer_dims, activation, seed=None):
         super().__init__(layer_dims, activation, seed)
-        self.beta = beta
 
     # Weight initialisation                                              #
     def _add_layer(self, fan_in, fan_out):
@@ -99,9 +98,9 @@ class VariationalAutoencoder(Autoencoder):
     def _loss(self, out, batch):
         N = batch.shape[0]
         recon = np.sum((out - batch) ** 2) / N
-        return recon + self.beta * self.kl_divergence(self._mu, self._logvar)
+        return recon + self.kl_divergence(self._mu, self._logvar)
 
-    # Backward (recon + beta * KL)                            #
+    # Backward (recon + KL)                                   #
     def _compute_grads(self, y_true):
         N = y_true.shape[0]
         n = len(self.weights)
@@ -123,8 +122,8 @@ class VariationalAutoencoder(Autoencoder):
         # reparam trick (z = mu + std*eps) and add KL.
         # dKL/dmu = mu
         # dKL/dlogvar = 0.5 * (exp(logvar) - 1)
-        d_mu = dz + self.beta * self._mu
-        d_logvar = dz * 0.5 * self._std * self._eps + self.beta * 0.5 * (np.exp(self._logvar) - 1)
+        d_mu = dz + self._mu
+        d_logvar = dz * 0.5 * self._std * self._eps + 0.5 * (np.exp(self._logvar) - 1)
 
         # head gradients
         dW[self.mu_idx] = self._h_enc.T @ d_mu / N
