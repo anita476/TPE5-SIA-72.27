@@ -39,7 +39,8 @@ def _imshow(ax, flat, is_color=False):
 
 # ── Prior sampling ───────────────────────────────────────────────────────────
 
-def prior_sample_grid(vae, n=16, seed=0, is_color=False, prefix=""):
+def prior_sample_grid(vae, X, labels, n=16, seed=0, is_color=False, prefix="",
+                      bitmaps_bw=None, bitmaps_color=None):
     rng = np.random.default_rng(seed)
     latent_dim = vae.layer_dims[vae.bottleneck_idx]
     z = rng.standard_normal((n, latent_dim))
@@ -85,6 +86,61 @@ def prior_sample_grid(vae, n=16, seed=0, is_color=False, prefix=""):
         plt.savefig(p2, dpi=150)
         plt.close(fig)
         paths.append(p2)
+
+    # Latent space map showing where samples came from (2-D only)
+    if latent_dim == 2:
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        mu_all = vae.encode(X)
+
+        # Pick bitmaps: color if available and color mode, else B&W
+        if is_color and bitmaps_color is not None:
+            bitmaps = bitmaps_color
+            cmap_kw = {}
+        else:
+            bitmaps = bitmaps_bw
+            cmap_kw = {"cmap": "gray_r"}
+
+        fig, ax = plt.subplots(figsize=(12, 10))
+
+        # Training data as emoji thumbnails
+        for i in range(len(mu_all)):
+            img = OffsetImage(bitmaps[i], zoom=1.0, **cmap_kw)
+            ab = AnnotationBbox(img, (mu_all[i, 0], mu_all[i, 1]),
+                                frameon=True, pad=0.2,
+                                bboxprops=dict(edgecolor="lightgray",
+                                               linewidth=0.5, alpha=0.6))
+            ax.add_artist(ab)
+
+        # Sampled z points
+        ax.scatter(z[:, 0], z[:, 1], c="tab:red", s=120, marker="*",
+                   edgecolor="black", linewidth=0.5, zorder=3,
+                   label=f"Prior samples (n={n})")
+        for i in range(n):
+            ax.annotate(str(i+1), (z[i, 0], z[i, 1]),
+                        fontsize=7, fontweight="bold", ha="center", va="bottom",
+                        xytext=(0, 6), textcoords="offset points", color="tab:red")
+
+        # 1-sigma circle of N(0,I)
+        theta = np.linspace(0, 2 * np.pi, 100)
+        ax.plot(np.cos(theta), np.sin(theta), "--", color="steelblue",
+                alpha=0.5, linewidth=1.0, label="1-sigma circle")
+
+        # Set limits with margin
+        all_pts = np.vstack([mu_all, z])
+        for dim, setter in [(0, ax.set_xlim), (1, ax.set_ylim)]:
+            lo, hi = all_pts[:, dim].min(), all_pts[:, dim].max()
+            span = max(hi - lo, 1.0)
+            setter(lo - 0.2 * span, hi + 0.2 * span)
+
+        ax.set_title("Prior Sampling: where the new emojis come from", fontsize=11)
+        ax.set_xlabel("z1"); ax.set_ylabel("z2")
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        p3 = os.path.join(OUT_DIR, f"{prefix}vae_prior_samples_latent.png")
+        plt.savefig(p3, dpi=150)
+        plt.close(fig)
+        paths.append(p3)
 
     return paths
 
@@ -239,7 +295,8 @@ def main():
 
     # 1) Prior sampling
     print("\n--- Prior Sampling ---")
-    paths = prior_sample_grid(vae, n=16, seed=123, is_color=is_color, prefix=prefix)
+    paths = prior_sample_grid(vae, X, labels, n=16, seed=123, is_color=is_color, prefix=prefix,
+                              bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color)
     for p in paths:
         print(f"  -> {p}")
 
