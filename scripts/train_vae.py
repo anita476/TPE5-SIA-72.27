@@ -1,5 +1,5 @@
 """train_vae.py
-Train a standard Variational Autoencoder on emoji (20x20) or Fashion-MNIST (28x28).
+Train a VAE on emoji (20x20), Fashion-MNIST (28x28), or Olivetti faces (64x64).
 
 Architecture sweep with multi-seed reporting (mean +/- std).
 
@@ -166,32 +166,33 @@ def plot_latent_comparison(latent_vae, latent_ae, labels,
     return path
 
 
-def _imshow_flat(ax, flat, rows=20, cols=20, is_color=False):
+def _imshow_flat(ax, flat, rows=20, cols=20, is_color=False, gray_cmap="gray_r"):
     if is_color:
         img = np.clip(flat.reshape(rows, cols, 3), 0, 1)
         ax.imshow(img)
     else:
-        ax.imshow(flat.reshape(rows, cols), cmap="gray_r", vmin=0, vmax=1)
+        ax.imshow(flat.reshape(rows, cols), cmap=gray_cmap, vmin=0, vmax=1)
 
 
 def plot_reconstructions(X, model, labels, out_dir=None,
                          filename="reconstructions.png", is_color=False,
-                         title="VAE Reconstructions", rows=20, cols=20):
+                         title="VAE Reconstructions", rows=20, cols=20,
+                         gray_cmap="gray_r"):
     out_dir = out_dir or OUT_DIR
     latent = model.encode(X)
     recon = model.decode(latent)
-    n = min(len(X), 20)  # cap for fashion (thousands of samples)
+    n = min(len(X), 20)  # cap for large datasets
     fig, axes = plt.subplots(2, n, figsize=(1.5 * n, 3.2))
     if n == 1:
         axes = axes.reshape(2, 1)
     for i in range(n):
-        _imshow_flat(axes[0, i], X[i], rows, cols, is_color)
+        _imshow_flat(axes[0, i], X[i], rows, cols, is_color, gray_cmap)
         axes[0, i].set_xticks([]); axes[0, i].set_yticks([])
         lbl = labels[i] if isinstance(labels[i], str) else str(labels[i])
         axes[0, i].set_title(lbl, fontsize=7)
         if i == 0:
             axes[0, i].set_ylabel("Original", fontsize=9)
-        _imshow_flat(axes[1, i], recon[i], rows, cols, is_color)
+        _imshow_flat(axes[1, i], recon[i], rows, cols, is_color, gray_cmap)
         axes[1, i].set_xticks([]); axes[1, i].set_yticks([])
         if i == 0:
             axes[1, i].set_ylabel("Reconstructed", fontsize=9)
@@ -226,6 +227,27 @@ def plot_latent_scatter_classes(latent, class_ids, label_names, title,
     return path
 
 
+def plot_latent_scatter_colorbar(latent, class_ids, title,
+                                  out_dir=None,
+                                  filename="latent_scatter_subjects.png",
+                                  cbar_label="Subject ID"):
+    """Scatter colored by numeric id with a colorbar — for many classes (e.g. 40)."""
+    out_dir = out_dir or OUT_DIR
+    fig, ax = plt.subplots(figsize=(8, 7))
+    sc = ax.scatter(latent[:, 0], latent[:, 1], c=class_ids,
+                    cmap="tab20", s=20, alpha=0.7)
+    cb = fig.colorbar(sc, ax=ax)
+    cb.set_label(cbar_label, fontsize=9)
+    ax.set_title(title, fontsize=11)
+    ax.set_xlabel("z1"); ax.set_ylabel("z2")
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(out_dir, filename)
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def _config_dir_name(layer_dims):
     """Create a short folder name from layer_dims, e.g. '400_128_2_128_400'."""
     return "_".join(str(d) for d in layer_dims)
@@ -234,7 +256,8 @@ def _config_dir_name(layer_dims):
 def generate_per_config_plots(vae, losses, cfg, X, labels,
                                bitmaps_bw, bitmaps_color, is_color, prefix="",
                                rows=20, cols=20, class_ids=None,
-                               label_names=None, dataset="emoji"):
+                               label_names=None, dataset="emoji",
+                               gray_cmap="gray_r"):
     """Generate loss curves, reconstructions, and latent scatter for one config."""
     dims = cfg["layer_dims"]
     latent_dim = dims[len(dims) // 2]
@@ -254,7 +277,7 @@ def generate_per_config_plots(vae, losses, cfg, X, labels,
     plot_reconstructions(X, vae, labels, out_dir=config_dir,
                          is_color=is_color,
                          title=f"VAE Reconstructions (arch={arch_str})",
-                         rows=rows, cols=cols)
+                         rows=rows, cols=cols, gray_cmap=gray_cmap)
 
     # Latent scatter (only for 2-D latent)
     if latent_dim == 2:
@@ -262,6 +285,11 @@ def generate_per_config_plots(vae, losses, cfg, X, labels,
         if dataset == "fashion" and class_ids is not None:
             plot_latent_scatter_classes(
                 latent, class_ids, label_names,
+                f"VAE Latent Space (arch={arch_str})",
+                out_dir=config_dir)
+        elif dataset == "olivetti" and class_ids is not None:
+            plot_latent_scatter_colorbar(
+                latent, class_ids,
                 f"VAE Latent Space (arch={arch_str})",
                 out_dir=config_dir)
         else:
@@ -287,7 +315,7 @@ def load_sweep_configs(config_path: str) -> dict:
 def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name,
                   labels, bitmaps_bw, bitmaps_color, is_color, prefix="",
                   rows=20, cols=20, class_ids=None, label_names=None,
-                  dataset="emoji"):
+                  dataset="emoji", gray_cmap="gray_r"):
     """Run one sweep axis: for each config, train over all seeds.
     Returns list of dicts with mean/std metrics.
     """
@@ -331,7 +359,8 @@ def run_one_sweep(X, sweep_configs, shared, seeds, sweep_name,
         generate_per_config_plots(best_vae, best_losses, cfg, X, labels,
                                    bitmaps_bw, bitmaps_color, is_color, prefix,
                                    rows=rows, cols=cols, class_ids=class_ids,
-                                   label_names=label_names, dataset=dataset)
+                                   label_names=label_names, dataset=dataset,
+                                   gray_cmap=gray_cmap)
 
     return results
 
@@ -398,20 +427,36 @@ def write_tuning_table(all_results, shared, seeds, filename="vae_arch_tuning_tab
 # -- main --------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Train VAE on emoji or Fashion-MNIST")
+    parser = argparse.ArgumentParser(description="Train VAE on emoji, Fashion-MNIST, or Olivetti")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to sweep config JSON")
     parser.add_argument("--color", action="store_true",
                         help="Train on color (RGB 1200-dim) instead of B&W (400-dim) [emoji only]")
     parser.add_argument("--dataset", type=str, default="emoji",
-                        choices=["emoji", "fashion"],
+                        choices=["emoji", "fashion", "olivetti"],
                         help="Dataset to train on (default: emoji)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
+    gray_cmap = "gray_r"  # default for emoji/fashion; overridden for faces
 
     # ---- Dataset loading ---------------------------------------------------
-    if args.dataset == "fashion":
+    if args.dataset == "olivetti":
+        from utils.olivetti_loader import load_olivetti, ROWS as O_ROWS, COLS as O_COLS
+        print("Loading Olivetti faces...")
+        X, class_ids, label_names = load_olivetti(seed=0)
+        labels = [f"s{c}" for c in class_ids]
+        is_color = False
+        bitmaps_bw = None
+        bitmaps_color = None
+        prefix = "olivetti_"
+        rows, cols = O_ROWS, O_COLS
+        gray_cmap = "gray"
+        default_sweep = os.path.join(os.path.dirname(__file__), "..",
+                                     "configs", "vae_sweep_olivetti.json")
+        print(f"  {len(X)} images, X shape = {X.shape}")
+
+    elif args.dataset == "fashion":
         from utils.fashion_mnist_loader import load_fashion_mnist, ROWS as F_ROWS, COLS as F_COLS
         print("Loading Fashion-MNIST...")
         X, class_ids, label_names = load_fashion_mnist(n_samples=4000, seed=0)
@@ -454,8 +499,9 @@ def main():
 
     sweep_kw = dict(labels=labels, bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
                     is_color=is_color, prefix=prefix, rows=rows, cols=cols,
-                    class_ids=class_ids if args.dataset == "fashion" else None,
-                    label_names=label_names, dataset=args.dataset)
+                    class_ids=class_ids if args.dataset in ("fashion", "olivetti") else None,
+                    label_names=label_names, dataset=args.dataset,
+                    gray_cmap=gray_cmap)
 
     # ---- Sweep A: Latent dimension ----------------------------------------
     print("\n=== Sweep A: Latent Dimension ===")
@@ -528,7 +574,31 @@ def main():
                             _config_dir_name(best_cfg["layer_dims"]))
     os.makedirs(best_dir, exist_ok=True)
 
-    if args.dataset == "fashion":
+    if args.dataset == "olivetti":
+        # Colorbar scatter for olivetti (40 subjects)
+        plot_latent_scatter_colorbar(latent_vae, class_ids,
+                                     "VAE Latent Space", out_dir=best_dir,
+                                     filename="vae_latent_scatter_subjects.png")
+        plot_latent_scatter_colorbar(latent_ae, class_ids,
+                                     "Plain AE Latent Space", out_dir=best_dir,
+                                     filename="ae_latent_scatter_subjects.png")
+        # Side-by-side comparison
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+        for ax, lat, title in [(axes[0], latent_ae, "Plain AE"),
+                                (axes[1], latent_vae, "VAE")]:
+            sc = ax.scatter(lat[:, 0], lat[:, 1], c=class_ids,
+                            cmap="tab20", s=20, alpha=0.7)
+            ax.set_title(title, fontsize=12)
+            ax.set_xlabel("z1"); ax.set_ylabel("z2")
+            ax.grid(True, alpha=0.3)
+        fig.colorbar(sc, ax=axes.tolist(), label="Subject ID", shrink=0.8)
+        plt.tight_layout()
+        cmp_path = os.path.join(best_dir, "vae_vs_ae_latent_subjects.png")
+        plt.savefig(cmp_path, dpi=150)
+        plt.close(fig)
+        print(f"AE vs VAE comparison -> {cmp_path}")
+
+    elif args.dataset == "fashion":
         # Class-colored scatter for fashion
         plot_latent_scatter_classes(latent_vae, class_ids, label_names,
                                     "VAE Latent Space", out_dir=best_dir,

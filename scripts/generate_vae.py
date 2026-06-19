@@ -1,7 +1,7 @@
 """generate_vae.py
 Generate new images from a trained VAE.
 
-Supports emoji (20x20) and Fashion-MNIST (28x28) datasets.
+Supports emoji (20x20), Fashion-MNIST (28x28), and Olivetti faces (64x64).
 
 Produces (with prefix):
   output/<prefix>vae_prior_samples.png
@@ -31,6 +31,53 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 # Module-level defaults; overridden in main() per dataset.
 ROWS, COLS = 20, 20
+GRAY_CMAP = "gray_r"
+
+
+def _pick_olivetti_pairs(vae, X, class_ids, seed=42):
+    """Pick expression (same subject) and identity (different subject) pairs.
+
+    For expression pairs, picks the two same-subject images whose latent means
+    are farthest apart — tends to be the biggest expression/pose change.
+
+    Returns (pairs, titles) where pairs is a list of (idx1, idx2) and titles
+    is a list of figure titles.
+    """
+    rng = np.random.default_rng(seed)
+    class_ids = np.asarray(class_ids)
+    mu_all = vae.encode(X)
+    subjects = np.unique(class_ids)
+
+    pairs, titles = [], []
+
+    # --- Expression morphs: same subject, max latent distance ---
+    for subj in rng.choice(subjects, size=2, replace=False):
+        idxs = np.where(class_ids == subj)[0]
+        mus = mu_all[idxs]
+        # Find the pair with max Euclidean distance in latent space
+        best_dist, best_i, best_j = -1, 0, 1
+        for i in range(len(idxs)):
+            for j in range(i + 1, len(idxs)):
+                d = np.linalg.norm(mus[i] - mus[j])
+                if d > best_dist:
+                    best_dist = d
+                    best_i, best_j = i, j
+        a, b = int(idxs[best_i]), int(idxs[best_j])
+        pairs.append((a, b))
+        titles.append(f"Expression morph (same subject {subj})")
+        print(f"  Expression pair: idx {a},{b} (subject {subj}), "
+              f"latent dist={best_dist:.3f}")
+
+    # --- Identity morphs: different subjects ---
+    subj_pairs = rng.choice(subjects, size=(2, 2), replace=False)
+    for s1, s2 in subj_pairs:
+        i1 = int(rng.choice(np.where(class_ids == s1)[0]))
+        i2 = int(rng.choice(np.where(class_ids == s2)[0]))
+        pairs.append((i1, i2))
+        titles.append(f"Identity morph (subject {s1} -> subject {s2})")
+        print(f"  Identity pair: idx {i1} (subj {s1}) -> {i2} (subj {s2})")
+
+    return pairs, titles
 
 
 def _imshow(ax, flat, is_color=False):
@@ -38,7 +85,7 @@ def _imshow(ax, flat, is_color=False):
     if is_color:
         ax.imshow(np.clip(flat.reshape(ROWS, COLS, 3), 0, 1))
     else:
-        ax.imshow(flat.reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+        ax.imshow(flat.reshape(ROWS, COLS), cmap=GRAY_CMAP, vmin=0, vmax=1)
 
 
 # ── Prior sampling ───────────────────────────────────────────────────────────
@@ -157,7 +204,7 @@ def prior_sample_grid(vae, X, labels, n=16, seed=0, is_color=False, prefix="",
 
 def latent_traversal_annotated(vae, X, labels, idx1, idx2,
                                n_steps=9, out_dir=".", filename=None,
-                               is_color=False, prefix=""):
+                               is_color=False, prefix="", title=None):
     latent_dim = vae.layer_dims[vae.bottleneck_idx]
     if latent_dim != 2:
         print(f"  annotated traversal needs latent_dim=2 (got {latent_dim}); "
@@ -202,7 +249,8 @@ def latent_traversal_annotated(vae, X, labels, idx1, idx2,
         axi.set_title(f"t={ts[i]:.2f}", fontsize=7)
         axi.set_xticks([]); axi.set_yticks([])
 
-    fig.suptitle(f"Latent traversal: {labels[idx1]}  ->  {labels[idx2]}", fontsize=12)
+    default_title = f"Latent traversal: {labels[idx1]}  ->  {labels[idx2]}"
+    fig.suptitle(title or default_title, fontsize=12)
     filename = filename or f"{prefix}vae_traversal_annotated_{idx1}_{idx2}.png"
     path = os.path.join(out_dir, filename)
     plt.savefig(path, dpi=150, bbox_inches="tight")
@@ -240,7 +288,7 @@ def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""
     if is_color:
         ax.imshow(np.clip(canvas, 0, 1))
     else:
-        ax.imshow(canvas, cmap="gray_r", vmin=0, vmax=1)
+        ax.imshow(canvas, cmap=GRAY_CMAP, vmin=0, vmax=1)
     ax.set_title(f"Latent Space Grid ({grid_size}x{grid_size}, range=[-{z_range},{z_range}])")
     ax.set_xticks([]); ax.set_yticks([])
     plt.tight_layout()
@@ -253,23 +301,38 @@ def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    global ROWS, COLS
+    global ROWS, COLS, GRAY_CMAP
 
     parser = argparse.ArgumentParser(description="Generate images from trained VAE")
     parser.add_argument("--color", action="store_true",
                         help="Use color (RGB 1200-dim) mode [emoji only]")
     parser.add_argument("--dataset", type=str, default="emoji",
-                        choices=["emoji", "fashion"],
+                        choices=["emoji", "fashion", "olivetti"],
                         help="Dataset to use (default: emoji)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
 
     # ---- Dataset loading ---------------------------------------------------
-    if args.dataset == "fashion":
+    if args.dataset == "olivetti":
+        from utils.olivetti_loader import load_olivetti
+        from utils.olivetti_loader import ROWS as O_ROWS, COLS as O_COLS
+        ROWS, COLS = O_ROWS, O_COLS
+        GRAY_CMAP = "gray"
+        print("Loading Olivetti faces...")
+        X, class_ids, label_names = load_olivetti(seed=0)
+        labels = [f"s{c}" for c in class_ids]
+        is_color = False
+        bitmaps_bw = None
+        bitmaps_color = None
+        prefix = "olivetti_"
+        print(f"  {len(X)} images, X shape = {X.shape}")
+
+    elif args.dataset == "fashion":
         from utils.fashion_mnist_loader import load_fashion_mnist
         from utils.fashion_mnist_loader import ROWS as F_ROWS, COLS as F_COLS
         ROWS, COLS = F_ROWS, F_COLS
+        GRAY_CMAP = "gray_r"
         print("Loading Fashion-MNIST...")
         X, class_ids, label_names = load_fashion_mnist(n_samples=4000, seed=0)
         labels = [label_names[c] for c in class_ids]
@@ -280,6 +343,7 @@ def main():
         print(f"  {len(X)} samples, X shape = {X.shape}")
     else:
         ROWS, COLS = 20, 20
+        GRAY_CMAP = "gray_r"
         is_color = args.color
         prefix = "color_" if is_color else ""
         data_path = os.path.join(os.path.dirname(__file__), "..", "data", "emojis.h")
@@ -297,7 +361,14 @@ def main():
             cfg = json.load(f)
         print(f"Using config from {cfg_path}")
     else:
-        if args.dataset == "fashion":
+        if args.dataset == "olivetti":
+            cfg = {
+                "layer_dims": [4096, 512, 2, 512, 4096],
+                "lr": 1e-3, "epochs": 10000,
+                "activation": "tanh", "seed": 42, "batch_size": 32,
+                "recon_loss": "mse",
+            }
+        elif args.dataset == "fashion":
             cfg = {
                 "layer_dims": [784, 256, 2, 256, 784],
                 "lr": 1e-3, "epochs": 200,
@@ -342,26 +413,30 @@ def main():
     # 2) Latent traversals
     print("\n--- Latent Traversals ---")
     n = len(X)
-    if args.dataset == "fashion":
-        # Pick one pair per interesting class combo
+    if args.dataset == "olivetti":
+        pairs, pair_titles = _pick_olivetti_pairs(vae, X, class_ids)
+    elif args.dataset == "fashion":
         rng = np.random.default_rng(42)
-        pairs = []
-        for c1, c2 in [(0, 6), (7, 5), (2, 4), (3, 0)]:  # shirt-shirt, sneaker-sandal, etc.
+        pairs, pair_titles = [], None
+        for c1, c2 in [(0, 6), (7, 5), (2, 4), (3, 0)]:
             i1 = rng.choice(np.where(class_ids == c1)[0])
             i2 = rng.choice(np.where(class_ids == c2)[0])
             pairs.append((int(i1), int(i2)))
     else:
+        pair_titles = None
         pairs = [
             (0, n//2),
             (1, n-1),
             (0, n-1),
             (n//4, 3*n//4),
         ]
-    for idx1, idx2 in pairs:
+    for k, (idx1, idx2) in enumerate(pairs):
         if idx1 < n and idx2 < n:
+            title = pair_titles[k] if pair_titles else None
             p = latent_traversal_annotated(vae, X, labels, idx1, idx2,
                                            n_steps=9, out_dir=OUT_DIR,
-                                           is_color=is_color, prefix=prefix)
+                                           is_color=is_color, prefix=prefix,
+                                           title=title)
             print(f"  {labels[idx1]} -> {labels[idx2]}: {p}")
 
     # 3) 2-D latent grid
@@ -371,19 +446,25 @@ def main():
     if p:
         print(f"  Grid -> {p}")
 
-    # 4) Class-colored latent scatter (fashion only)
-    if args.dataset == "fashion":
-        from train_vae import plot_latent_scatter_classes
-        latent_dim = vae.layer_dims[vae.bottleneck_idx]
-        if latent_dim == 2:
-            print("\n--- Class-Colored Latent Scatter ---")
-            latent = vae.encode(X)
+    # 4) Latent scatter (non-emoji datasets)
+    latent_dim = vae.layer_dims[vae.bottleneck_idx]
+    if latent_dim == 2 and args.dataset in ("fashion", "olivetti"):
+        from train_vae import plot_latent_scatter_classes, plot_latent_scatter_colorbar
+        print("\n--- Latent Scatter ---")
+        latent = vae.encode(X)
+        if args.dataset == "olivetti":
+            p = plot_latent_scatter_colorbar(
+                latent, class_ids,
+                "Olivetti VAE Latent Space",
+                out_dir=OUT_DIR,
+                filename=f"{prefix}vae_latent_scatter_subjects.png")
+        else:
             p = plot_latent_scatter_classes(
                 latent, class_ids, label_names,
                 "Fashion-MNIST VAE Latent Space",
                 out_dir=OUT_DIR,
                 filename=f"{prefix}vae_latent_scatter_classes.png")
-            print(f"  -> {p}")
+        print(f"  -> {p}")
 
     print("\n=== generate_vae.py complete ===")
 

@@ -226,3 +226,7 @@ CLAUDE.md
 .gitignore
 vae_theory.md
 .DS_Store
+src/autoencoders/ConvVAE.py
+.gitignore
+src/autoencoders/conv_layers.py
+scripts/olivetti_conv_vae.py
