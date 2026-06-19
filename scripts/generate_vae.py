@@ -1,10 +1,12 @@
 """generate_vae.py
-Generate new emojis from a trained VAE.
+Generate new images from a trained VAE.
 
-Produces (with optional color_ prefix when --color is used):
-  output/vae_prior_samples.png      — grid of emojis from z ~ N(0, I)
-  output/vae_traversal_*.png        — latent interpolation strips between emoji pairs
-  output/vae_latent_grid.png        — decode a uniform grid over the 2-D latent space
+Supports emoji (20x20) and Fashion-MNIST (28x28) datasets.
+
+Produces (with prefix):
+  output/<prefix>vae_prior_samples.png
+  output/<prefix>vae_traversal_*.png
+  output/<prefix>vae_latent_grid.png
 
 Run AFTER train_vae.py (uses the best config it saved).
 """
@@ -26,11 +28,13 @@ from utils.emoji_loader import load_emojis
 from autoencoders.VariationalAutoencoder import VariationalAutoencoder
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
+
+# Module-level defaults; overridden in main() per dataset.
 ROWS, COLS = 20, 20
 
 
 def _imshow(ax, flat, is_color=False):
-    """Display a single flattened emoji."""
+    """Display a single flattened image."""
     if is_color:
         ax.imshow(np.clip(flat.reshape(ROWS, COLS, 3), 0, 1))
     else:
@@ -92,24 +96,28 @@ def prior_sample_grid(vae, X, labels, n=16, seed=0, is_color=False, prefix="",
         from matplotlib.offsetbox import OffsetImage, AnnotationBbox
         mu_all = vae.encode(X)
 
-        # Pick bitmaps: color if available and color mode, else B&W
-        if is_color and bitmaps_color is not None:
-            bitmaps = bitmaps_color
-            cmap_kw = {}
-        else:
-            bitmaps = bitmaps_bw
-            cmap_kw = {"cmap": "gray_r"}
-
         fig, ax = plt.subplots(figsize=(12, 10))
 
-        # Training data as emoji thumbnails
-        for i in range(len(mu_all)):
-            img = OffsetImage(bitmaps[i], zoom=1.0, **cmap_kw)
-            ab = AnnotationBbox(img, (mu_all[i, 0], mu_all[i, 1]),
-                                frameon=True, pad=0.2,
-                                bboxprops=dict(edgecolor="lightgray",
-                                               linewidth=0.5, alpha=0.6))
-            ax.add_artist(ab)
+        # Training data: thumbnails for small datasets, scatter for large
+        if bitmaps_bw is not None or bitmaps_color is not None:
+            # Small dataset (emojis): show thumbnails
+            if is_color and bitmaps_color is not None:
+                bitmaps = bitmaps_color
+                cmap_kw = {}
+            else:
+                bitmaps = bitmaps_bw
+                cmap_kw = {"cmap": "gray_r"}
+            for i in range(len(mu_all)):
+                img = OffsetImage(bitmaps[i], zoom=1.0, **cmap_kw)
+                ab = AnnotationBbox(img, (mu_all[i, 0], mu_all[i, 1]),
+                                    frameon=True, pad=0.2,
+                                    bboxprops=dict(edgecolor="lightgray",
+                                                   linewidth=0.5, alpha=0.6))
+                ax.add_artist(ab)
+        else:
+            # Large dataset (fashion): scatter dots
+            ax.scatter(mu_all[:, 0], mu_all[:, 1], c="lightgray", s=6,
+                       alpha=0.3, zorder=1, label="Training data")
 
         # Sampled z points
         ax.scatter(z[:, 0], z[:, 1], c="tab:red", s=120, marker="*",
@@ -132,7 +140,7 @@ def prior_sample_grid(vae, X, labels, n=16, seed=0, is_color=False, prefix="",
             span = max(hi - lo, 1.0)
             setter(lo - 0.2 * span, hi + 0.2 * span)
 
-        ax.set_title("Prior Sampling: where the new emojis come from", fontsize=11)
+        ax.set_title("Prior Sampling: where the new images come from", fontsize=11)
         ax.set_xlabel("z1"); ax.set_ylabel("z2")
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
@@ -168,7 +176,9 @@ def latent_traversal_annotated(vae, X, labels, idx1, idx2,
 
     if latent_dim == 2:
         ax = fig.add_subplot(gs[0, :])
-        ax.scatter(mu_all[:, 0], mu_all[:, 1], c="lightgray", s=70, zorder=1)
+        bg_s = 8 if len(mu_all) > 100 else 70
+        ax.scatter(mu_all[:, 0], mu_all[:, 1], c="lightgray", s=bg_s,
+                   alpha=0.4, zorder=1)
         ax.plot(zs[:, 0], zs[:, 1], "--", color="gray", lw=1.2, zorder=2)
         sc = ax.scatter(zs[:, 0], zs[:, 1], c=ts, cmap="viridis",
                         s=55, zorder=3, edgecolor="white", linewidth=0.5)
@@ -180,8 +190,7 @@ def latent_traversal_annotated(vae, X, labels, idx1, idx2,
                     xytext=(0, 10), textcoords="offset points", color="tab:blue")
         ax.annotate(labels[idx2], mu2, fontsize=8, ha="center", va="bottom",
                     xytext=(0, 10), textcoords="offset points", color="tab:red")
-        ax.set_title("Latent space: the line walked between the two emojis",
-                     fontsize=10)
+        ax.set_title("Latent space: traversal path", fontsize=10)
         ax.set_xlabel("z1"); ax.set_ylabel("z2")
         ax.grid(True, alpha=0.3)
         cb = fig.colorbar(sc, ax=ax, fraction=0.025, pad=0.01)
@@ -244,20 +253,42 @@ def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate emojis from trained VAE")
+    global ROWS, COLS
+
+    parser = argparse.ArgumentParser(description="Generate images from trained VAE")
     parser.add_argument("--color", action="store_true",
-                        help="Use color (RGB 1200-dim) mode")
+                        help="Use color (RGB 1200-dim) mode [emoji only]")
+    parser.add_argument("--dataset", type=str, default="emoji",
+                        choices=["emoji", "fashion"],
+                        help="Dataset to use (default: emoji)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    is_color = args.color
-    prefix = "color_" if is_color else ""
 
-    # Load data
-    data_path = os.path.join(os.path.dirname(__file__), "..", "data", "emojis.h")
-    X_color, X_bw, bitmaps_color, bitmaps_bw, labels = load_emojis(data_path)
-    X = X_color if is_color else X_bw
-    print(f"Loaded {len(labels)} emojis, X shape = {X.shape} ({'color' if is_color else 'bw'})")
+    # ---- Dataset loading ---------------------------------------------------
+    if args.dataset == "fashion":
+        from utils.fashion_mnist_loader import load_fashion_mnist
+        from utils.fashion_mnist_loader import ROWS as F_ROWS, COLS as F_COLS
+        ROWS, COLS = F_ROWS, F_COLS
+        print("Loading Fashion-MNIST...")
+        X, class_ids, label_names = load_fashion_mnist(n_samples=4000, seed=0)
+        labels = [label_names[c] for c in class_ids]
+        is_color = False
+        bitmaps_bw = None
+        bitmaps_color = None
+        prefix = "fashion_"
+        print(f"  {len(X)} samples, X shape = {X.shape}")
+    else:
+        ROWS, COLS = 20, 20
+        is_color = args.color
+        prefix = "color_" if is_color else ""
+        data_path = os.path.join(os.path.dirname(__file__), "..", "data", "emojis.h")
+        X_color, X_bw, bitmaps_color, bitmaps_bw, labels = load_emojis(data_path)
+        X = X_color if is_color else X_bw
+        class_ids = None
+        label_names = None
+        print(f"Loaded {len(labels)} emojis, X shape = {X.shape} "
+              f"({'color' if is_color else 'bw'})")
 
     # Load best config or use defaults
     cfg_path = os.path.join(OUT_DIR, f"{prefix}best_vae_config.json")
@@ -266,7 +297,14 @@ def main():
             cfg = json.load(f)
         print(f"Using config from {cfg_path}")
     else:
-        if is_color:
+        if args.dataset == "fashion":
+            cfg = {
+                "layer_dims": [784, 256, 2, 256, 784],
+                "lr": 1e-3, "epochs": 200,
+                "activation": "tanh", "seed": 42, "batch_size": 64,
+                "recon_loss": "mse",
+            }
+        elif is_color:
             cfg = {
                 "layer_dims": [1200, 256, 2, 256, 1200],
                 "lr": 1e-3, "epochs": 3000,
@@ -280,7 +318,7 @@ def main():
                 "activation": "relu", "seed": 42, "batch_size": 20,
                 "recon_loss": "bce",
             }
-        print(f"No saved config found, using defaults")
+        print("No saved config found, using defaults")
 
     # Train
     print("\nTraining VAE...")
@@ -295,20 +333,30 @@ def main():
 
     # 1) Prior sampling
     print("\n--- Prior Sampling ---")
-    paths = prior_sample_grid(vae, X, labels, n=16, seed=123, is_color=is_color, prefix=prefix,
+    paths = prior_sample_grid(vae, X, labels, n=16, seed=123, is_color=is_color,
+                              prefix=prefix,
                               bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color)
     for p in paths:
         print(f"  -> {p}")
 
     # 2) Latent traversals
     print("\n--- Latent Traversals ---")
-    n = len(labels)
-    pairs = [
-        (0, n//2),
-        (1, n-1),
-        (0, n-1),
-        (n//4, 3*n//4),
-    ]
+    n = len(X)
+    if args.dataset == "fashion":
+        # Pick one pair per interesting class combo
+        rng = np.random.default_rng(42)
+        pairs = []
+        for c1, c2 in [(0, 6), (7, 5), (2, 4), (3, 0)]:  # shirt-shirt, sneaker-sandal, etc.
+            i1 = rng.choice(np.where(class_ids == c1)[0])
+            i2 = rng.choice(np.where(class_ids == c2)[0])
+            pairs.append((int(i1), int(i2)))
+    else:
+        pairs = [
+            (0, n//2),
+            (1, n-1),
+            (0, n-1),
+            (n//4, 3*n//4),
+        ]
     for idx1, idx2 in pairs:
         if idx1 < n and idx2 < n:
             p = latent_traversal_annotated(vae, X, labels, idx1, idx2,
@@ -322,6 +370,20 @@ def main():
                            is_color=is_color, prefix=prefix)
     if p:
         print(f"  Grid -> {p}")
+
+    # 4) Class-colored latent scatter (fashion only)
+    if args.dataset == "fashion":
+        from train_vae import plot_latent_scatter_classes
+        latent_dim = vae.layer_dims[vae.bottleneck_idx]
+        if latent_dim == 2:
+            print("\n--- Class-Colored Latent Scatter ---")
+            latent = vae.encode(X)
+            p = plot_latent_scatter_classes(
+                latent, class_ids, label_names,
+                "Fashion-MNIST VAE Latent Space",
+                out_dir=OUT_DIR,
+                filename=f"{prefix}vae_latent_scatter_classes.png")
+            print(f"  -> {p}")
 
     print("\n=== generate_vae.py complete ===")
 

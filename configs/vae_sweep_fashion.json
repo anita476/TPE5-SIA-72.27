@@ -1,0 +1,30 @@
+{
+  "latent_dim_sweep": {
+    "description": "Sweep A: vary latent dimension, fixed body [784, 256, L, 256, 784]",
+    "configs": [
+      {"layer_dims": [784, 256, 2, 256, 784]},
+      {"layer_dims": [784, 256, 4, 256, 784]},
+      {"layer_dims": [784, 256, 8, 256, 784]},
+      {"layer_dims": [784, 256, 16, 256, 784]}
+    ]
+  },
+  "arch_sweep": {
+    "description": "Sweep B: vary depth/width, fixed latent_dim=2",
+    "configs": [
+      {"layer_dims": [784, 128, 2, 128, 784]},
+      {"layer_dims": [784, 256, 2, 256, 784]},
+      {"layer_dims": [784, 512, 256, 2, 256, 512, 784]}
+    ]
+  },
+  "shared": {
+    "activation": "tanh",
+    "lr": 1e-3,
+    "epochs": 10000,
+    "batch_size": 64,
+    "optimizer": "adam",
+    "log_every": 20,
+    "patience": 30,
+    "recon_loss": "mse"
+  },
+  "seeds": [0, 1, 2]
+}
