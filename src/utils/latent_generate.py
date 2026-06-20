@@ -7,6 +7,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from utils import plot_style
+
 ROWS, COLS = 7, 5
 
 

@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from utils import plot_style
 from utils.single_run import execute_run
 
 

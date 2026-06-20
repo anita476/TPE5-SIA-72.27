@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from utils import plot_style
 from autoencoders.DenoisingAutoencoder import DenoisingAutoencoder
 from utils.config_loader import load_config
 from utils.denoising_eval import run_denoising_study

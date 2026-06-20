@@ -25,6 +25,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from utils import plot_style
 from utils.emoji_loader import load_emojis
 from autoencoders.VariationalAutoencoder import VariationalAutoencoder
 from autoencoders.SimpleAutoencoder import SimpleAutoencoder

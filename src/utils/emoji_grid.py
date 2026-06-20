@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+import plot_style
 from emoji_loader import load_emojis
 
 EMOJIS_H = os.path.normpath(

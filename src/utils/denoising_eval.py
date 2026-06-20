@@ -8,6 +8,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from utils import plot_style
 from utils.noise import add_noise
 
 ROWS, COLS = 7, 5

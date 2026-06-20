@@ -19,6 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
+from utils import plot_style
 from sklearn.datasets import fetch_olivetti_faces
 from autoencoders.VariationalAutoencoder import VariationalAutoencoder
 

@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import plot_style
 from olivetti_loader import load_olivetti, ROWS, COLS
 
 
