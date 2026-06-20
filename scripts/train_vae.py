@@ -1,5 +1,6 @@
 """train_vae.py
-Train a VAE on emoji (20x20), Fashion-MNIST (28x28), or Olivetti faces (64x64).
+Train a VAE on emoji (20x20), Fashion-MNIST (28x28), Olivetti faces (64x64),
+or CelebA faces (20x20 grayscale).
 
 Architecture sweep with multi-seed reporting (mean +/- std).
 
@@ -282,14 +283,14 @@ def generate_per_config_plots(vae, losses, cfg, X, labels,
     # Latent scatter (only for 2-D latent)
     if latent_dim == 2:
         latent = vae.encode(X)
-        if dataset == "fashion" and class_ids is not None:
-            plot_latent_scatter_classes(
-                latent, class_ids, label_names,
-                f"VAE Latent Space (arch={arch_str})",
-                out_dir=config_dir)
-        elif dataset == "olivetti" and class_ids is not None:
+        if dataset == "olivetti" and class_ids is not None:
             plot_latent_scatter_colorbar(
                 latent, class_ids,
+                f"VAE Latent Space (arch={arch_str})",
+                out_dir=config_dir)
+        elif dataset != "emoji" and class_ids is not None:
+            plot_latent_scatter_classes(
+                latent, class_ids, label_names,
                 f"VAE Latent Space (arch={arch_str})",
                 out_dir=config_dir)
         else:
@@ -433,8 +434,10 @@ def main():
     parser.add_argument("--color", action="store_true",
                         help="Train on color (RGB 1200-dim) instead of B&W (400-dim) [emoji only]")
     parser.add_argument("--dataset", type=str, default="emoji",
-                        choices=["emoji", "fashion", "olivetti"],
+                        choices=["emoji", "fashion", "olivetti", "celeba"],
                         help="Dataset to train on (default: emoji)")
+    parser.add_argument("--n-samples", type=int, default=None,
+                        help="Number of samples to load (fashion/celeba only)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -459,7 +462,8 @@ def main():
     elif args.dataset == "fashion":
         from utils.fashion_mnist_loader import load_fashion_mnist, ROWS as F_ROWS, COLS as F_COLS
         print("Loading Fashion-MNIST...")
-        X, class_ids, label_names = load_fashion_mnist(n_samples=4000, seed=0)
+        X, class_ids, label_names = load_fashion_mnist(
+            n_samples=args.n_samples or 4000, seed=0)
         labels = [label_names[c] for c in class_ids]
         is_color = False
         bitmaps_bw = None
@@ -468,6 +472,21 @@ def main():
         rows, cols = F_ROWS, F_COLS
         default_sweep = os.path.join(os.path.dirname(__file__), "..",
                                      "configs", "vae_sweep_fashion.json")
+        print(f"  {len(X)} samples, X shape = {X.shape}")
+    elif args.dataset == "celeba":
+        from utils.celeba_loader import load_celeba, ROWS as C_ROWS, COLS as C_COLS
+        print("Loading CelebA...")
+        X, class_ids, label_names = load_celeba(
+            n_samples=args.n_samples or 2000, seed=0)
+        labels = [label_names[c] for c in class_ids]
+        is_color = False
+        bitmaps_bw = None
+        bitmaps_color = None
+        prefix = "celeba_"
+        rows, cols = C_ROWS, C_COLS
+        gray_cmap = "gray"
+        default_sweep = os.path.join(os.path.dirname(__file__), "..",
+                                     "configs", "vae_sweep_celeba.json")
         print(f"  {len(X)} samples, X shape = {X.shape}")
     else:
         is_color = args.color
@@ -499,7 +518,7 @@ def main():
 
     sweep_kw = dict(labels=labels, bitmaps_bw=bitmaps_bw, bitmaps_color=bitmaps_color,
                     is_color=is_color, prefix=prefix, rows=rows, cols=cols,
-                    class_ids=class_ids if args.dataset in ("fashion", "olivetti") else None,
+                    class_ids=class_ids if args.dataset != "emoji" else None,
                     label_names=label_names, dataset=args.dataset,
                     gray_cmap=gray_cmap)
 
@@ -598,8 +617,8 @@ def main():
         plt.close(fig)
         print(f"AE vs VAE comparison -> {cmp_path}")
 
-    elif args.dataset == "fashion":
-        # Class-colored scatter for fashion
+    elif args.dataset in ("fashion", "celeba"):
+        # Class-colored scatter for fashion / celeba
         plot_latent_scatter_classes(latent_vae, class_ids, label_names,
                                     "VAE Latent Space", out_dir=best_dir,
                                     filename="vae_latent_scatter_classes.png")

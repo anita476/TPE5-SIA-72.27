@@ -1,0 +1,22 @@
+{
+  "latent_dim_sweep": {
+    "description": "Sweep A: vary latent dimension, fixed body [1600, 400, L, 400, 1600]",
+    "configs": [
+      {"layer_dims": [1600, 400, 2, 400, 1600]},
+      {"layer_dims": [1600, 400, 4, 400, 1600]},
+      {"layer_dims": [1600, 400, 8, 400, 1600]},
+      {"layer_dims": [1600, 400, 16, 400, 1600]}
+    ]
+  },
+  "shared": {
+    "activation": "tanh",
+    "lr": 1e-3,
+    "epochs": 10000,
+    "batch_size": 64,
+    "optimizer": "adam",
+    "log_every": 20,
+    "patience": 30,
+    "recon_loss": "mse"
+  },
+  "seeds": [0, 1, 2]
+}

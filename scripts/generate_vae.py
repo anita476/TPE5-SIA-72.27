@@ -1,7 +1,8 @@
 """generate_vae.py
 Generate new images from a trained VAE.
 
-Supports emoji (20x20), Fashion-MNIST (28x28), and Olivetti faces (64x64).
+Supports emoji (20x20), Fashion-MNIST (28x28), Olivetti faces (64x64), and
+CelebA (20x20 grayscale).
 
 Produces (with prefix):
   output/<prefix>vae_prior_samples.png
@@ -307,8 +308,10 @@ def main():
     parser.add_argument("--color", action="store_true",
                         help="Use color (RGB 1200-dim) mode [emoji only]")
     parser.add_argument("--dataset", type=str, default="emoji",
-                        choices=["emoji", "fashion", "olivetti"],
+                        choices=["emoji", "fashion", "olivetti", "celeba"],
                         help="Dataset to use (default: emoji)")
+    parser.add_argument("--n-samples", type=int, default=None,
+                        help="Number of samples to load (fashion/celeba only)")
     args = parser.parse_args()
 
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -334,12 +337,27 @@ def main():
         ROWS, COLS = F_ROWS, F_COLS
         GRAY_CMAP = "gray_r"
         print("Loading Fashion-MNIST...")
-        X, class_ids, label_names = load_fashion_mnist(n_samples=4000, seed=0)
+        X, class_ids, label_names = load_fashion_mnist(
+            n_samples=args.n_samples or 4000, seed=0)
         labels = [label_names[c] for c in class_ids]
         is_color = False
         bitmaps_bw = None
         bitmaps_color = None
         prefix = "fashion_"
+        print(f"  {len(X)} samples, X shape = {X.shape}")
+    elif args.dataset == "celeba":
+        from utils.celeba_loader import load_celeba
+        from utils.celeba_loader import ROWS as C_ROWS, COLS as C_COLS
+        ROWS, COLS = C_ROWS, C_COLS
+        GRAY_CMAP = "gray"
+        print("Loading CelebA...")
+        X, class_ids, label_names = load_celeba(
+            n_samples=args.n_samples or 2000, seed=0)
+        labels = [label_names[c] for c in class_ids]
+        is_color = False
+        bitmaps_bw = None
+        bitmaps_color = None
+        prefix = "celeba_"
         print(f"  {len(X)} samples, X shape = {X.shape}")
     else:
         ROWS, COLS = 20, 20
@@ -372,6 +390,13 @@ def main():
             cfg = {
                 "layer_dims": [784, 256, 2, 256, 784],
                 "lr": 1e-3, "epochs": 200,
+                "activation": "tanh", "seed": 42, "batch_size": 64,
+                "recon_loss": "mse",
+            }
+        elif args.dataset == "celeba":
+            cfg = {
+                "layer_dims": [4096, 512, 2, 512, 4096],
+                "lr": 1e-6, "epochs": 10000,
                 "activation": "tanh", "seed": 42, "batch_size": 64,
                 "recon_loss": "mse",
             }
@@ -448,7 +473,7 @@ def main():
 
     # 4) Latent scatter (non-emoji datasets)
     latent_dim = vae.layer_dims[vae.bottleneck_idx]
-    if latent_dim == 2 and args.dataset in ("fashion", "olivetti"):
+    if latent_dim == 2 and args.dataset != "emoji":
         from train_vae import plot_latent_scatter_classes, plot_latent_scatter_colorbar
         print("\n--- Latent Scatter ---")
         latent = vae.encode(X)
@@ -458,10 +483,11 @@ def main():
                 "Olivetti VAE Latent Space",
                 out_dir=OUT_DIR,
                 filename=f"{prefix}vae_latent_scatter_subjects.png")
-        else:
+        else:  # fashion / celeba
+            title = {"fashion": "Fashion-MNIST", "celeba": "CelebA"}.get(
+                args.dataset, args.dataset) + " VAE Latent Space"
             p = plot_latent_scatter_classes(
-                latent, class_ids, label_names,
-                "Fashion-MNIST VAE Latent Space",
+                latent, class_ids, label_names, title,
                 out_dir=OUT_DIR,
                 filename=f"{prefix}vae_latent_scatter_classes.png")
         print(f"  -> {p}")
