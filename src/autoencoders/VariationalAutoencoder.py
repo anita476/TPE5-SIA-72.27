@@ -96,6 +96,12 @@ class VariationalAutoencoder(Autoencoder):
         per_sample = -0.5 * np.sum(1 + logvar - mu**2 - np.exp(logvar), axis=1)
         return np.mean(per_sample)
 
+    @staticmethod
+    def kl_per_dim(mu, logvar):
+        """KL(q(z|x)||N(0,I)) split per latent dimension (averaged over samples).
+        """
+        return -0.5 * np.mean(1 + logvar - mu**2 - np.exp(logvar), axis=0)
+
     def _loss(self, out, batch):
         N = batch.shape[0]
         if self.recon_loss == "bce":

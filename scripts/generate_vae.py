@@ -395,9 +395,11 @@ def main():
             }
         elif args.dataset == "celeba":
             cfg = {
-                "layer_dims": [4096, 512, 2, 512, 4096],
+                "layer_dims": [1600, 400, 2, 400, 1600],
                 "lr": 1e-6, "epochs": 10000,
-                "activation": "tanh", "seed": 42, "batch_size": 64,
+                "activation": "tanh", 
+                "seed": 42, 
+                "batch_size": 64,
                 "recon_loss": "mse",
             }
         elif is_color:

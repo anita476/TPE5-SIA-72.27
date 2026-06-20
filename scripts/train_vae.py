@@ -249,6 +249,36 @@ def plot_latent_scatter_colorbar(latent, class_ids, title,
     return path
 
 
+def plot_kl_per_dim(vae, X, title, out_dir=None, filename="kl_per_dim.png",
+                    active_thresh=0.01):
+    """Bar chart of per-dimension KL, reveals posterior collapse.
+
+    Tall bars are active dimensions. Bars near 0 are
+    collapsed onto the prior (mu~0, sigma~1).
+    """
+    out_dir = out_dir or OUT_DIR
+    vae.forward(X)
+    kl = vae.kl_per_dim(vae._mu, vae._logvar)
+    n_active = int(np.sum(kl > active_thresh))
+
+    fig, ax = plt.subplots(figsize=(max(5, len(kl) * 0.4), 4))
+    colors = ["tab:blue" if k > active_thresh else "lightgray" for k in kl]
+    ax.bar(np.arange(len(kl)), kl, color=colors)
+    ax.axhline(active_thresh, color="red", ls="--", lw=0.8,
+               label=f"active threshold ({active_thresh})")
+    ax.set_xlabel("Latent dimension")
+    ax.set_ylabel("KL divergence (nats)")
+    ax.set_title(f"{title}\nactive dims: {n_active}/{len(kl)}", fontsize=10)
+    ax.set_xticks(np.arange(len(kl)))
+    ax.legend(fontsize=8)
+    ax.grid(True, axis="y", alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(out_dir, filename)
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return path, n_active
+
+
 def _config_dir_name(layer_dims):
     """Create a short folder name from layer_dims, e.g. '400_128_2_128_400'."""
     return "_".join(str(d) for d in layer_dims)
@@ -279,6 +309,10 @@ def generate_per_config_plots(vae, losses, cfg, X, labels,
                          is_color=is_color,
                          title=f"VAE Reconstructions (arch={arch_str})",
                          rows=rows, cols=cols, gray_cmap=gray_cmap)
+
+    _, n_active = plot_kl_per_dim(
+        vae, X, f"KL per latent dim (arch={arch_str})", out_dir=config_dir)
+    print(f"    Active latent dims: {n_active}/{latent_dim}")
 
     # Latent scatter (only for 2-D latent)
     if latent_dim == 2:
