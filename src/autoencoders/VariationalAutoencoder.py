@@ -1,7 +1,7 @@
 import numpy as np
 from autoencoders.Autoencoder import (
     Autoencoder,
-    init_weights,
+    xavier_init,
     sigmoid,
     sigmoid_grad,
 )
@@ -20,7 +20,7 @@ class VariationalAutoencoder(Autoencoder):
     # Weight initialisation                                              #
     def _add_layer(self, fan_in, fan_out):
         """Append one (weight, bias) pair to the flat parameter lists."""
-        self.weights.append(init_weights(fan_in, fan_out, self.rng))
+        self.weights.append(xavier_init(fan_in, fan_out, self.rng))
         self.biases.append(np.zeros((1, fan_out)))
 
     def _init_weights(self):

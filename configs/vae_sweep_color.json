@@ -5,7 +5,8 @@
       {"layer_dims": [1200, 256, 2, 256, 1200]},
       {"layer_dims": [1200, 256, 4, 256, 1200]},
       {"layer_dims": [1200, 256, 8, 256, 1200]},
-      {"layer_dims": [1200, 256, 16, 256, 1200]}
+      {"layer_dims": [1200, 256, 16, 256, 1200]},
+      {"layer_dims": [1200, 256, 32, 256, 1200]}
     ]
   },
   "arch_sweep": {
@@ -13,13 +14,14 @@
     "configs": [
       {"layer_dims": [1200, 128, 2, 128, 1200]},
       {"layer_dims": [1200, 256, 2, 256, 1200]},
+      {"layer_dims": [1200, 512, 2, 256, 1200]},
       {"layer_dims": [1200, 512, 256, 2, 256, 512, 1200]}
     ]
   },
   "shared": {
     "activation": "tanh",
     "lr": 1e-3,
-    "epochs": 3000,
+    "epochs": 10000,
     "batch_size": 20,
     "optimizer": "adam",
     "log_every": 500,

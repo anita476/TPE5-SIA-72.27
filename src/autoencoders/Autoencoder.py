@@ -20,6 +20,11 @@ def mse_grad(y_pred, y_true):
 def init_weights(fan_in, fan_out, rng):
     return rng.standard_normal((fan_in, fan_out)) * np.sqrt(2.0 / fan_in)
 
+
+def xavier_init(fan_in, fan_out, rng):
+    limit = np.sqrt(6 / (fan_in + fan_out))
+    return rng.uniform(-limit, limit, (fan_in, fan_out))
+
 class Autoencoder:
     def __init__(self, layer_dims, activation, seed=None):
         """
