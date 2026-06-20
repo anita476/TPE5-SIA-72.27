@@ -11,6 +11,7 @@ from _bootstrap import resolve
 import os
 import matplotlib.pyplot as plt
 
+import utils.plot_style
 from utils.font_loader import load_font
 
 
