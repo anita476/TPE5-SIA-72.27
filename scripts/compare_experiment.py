@@ -26,6 +26,8 @@ def main():
                              "\"seeds\" list.")
     parser.add_argument("--workers", type=int, default=1,
                         help="Simultaneous runs (1 = sequential).")
+    parser.add_argument("--latent-show", type=int, default=6,
+                        help="How many seeds to display in each variant latent-space grid.")
     args = parser.parse_args()
 
     cfg = load_config(resolve(args.config))
@@ -42,7 +44,9 @@ def main():
 
     print(f"Loaded {len(X)} characters  |  {len(variants)} variant(s)")
     run_comparison(variants, base, X, list(labels), out_dir,
-                   seeds=seed_list, workers=args.workers, max_errors=cfg.get("max_errors"))
+                   seeds=seed_list, workers=args.workers,
+                   max_errors=cfg.get("max_errors"),
+                   latent_show=args.latent_show)
 
 
 if __name__ == "__main__":

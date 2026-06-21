@@ -17,7 +17,7 @@
     "patience":         8000,
     "min_delta":        1e-7,
     "threshold":        0.5,
-    "max_errors":       1,
+    "max_errors":       0,
 
     "variants": [
         {"name": "adam deep he",     "optimizer": "adam", "lr": 0.001, "weight_init": "he",     "layer_dims": [35, 30, 15, 2, 15, 30, 35]},

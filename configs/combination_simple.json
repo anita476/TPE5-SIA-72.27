@@ -1,21 +1,22 @@
 {
     "font":             "data/font.h",
     "autoencoder_type": "simple",
-    "out":              "output/grid_test",
+    "out":              "output/grid_optimization",
 
-    "layer_dims":       [35, 24, 8, 2, 8, 24, 35],
+    "layer_dims":       [35, 16, 2, 16, 35],
     "activation":       "tanh",
-    "weight_init":      "he",
-    "optimizer":        "adam",
+    "weight_init":      "xavier",
+    "optimizer":        "sgd",
     "batch_size":       4,
     "seed":             42,
     "epochs":           100000,
-    "log_every":        1000,
+    "log_every":        1,
     "threshold":        0.5,
-    "max_errors":       1,
+    "max_errors":       0,
 
     "grid": {
-        "lr":           [0.001,0.0001,0.0004],
-        "seed":         [1,2,3]
+        "lr":           [0.2,0.1,0.02,0.01,0.002,0.001,0.0002,0.0001],
+        "optimizer":    ["sgd","adam"],
+        "seed":         [1,2,3, 4,5,6,7,8,9,10]
     }
 }
