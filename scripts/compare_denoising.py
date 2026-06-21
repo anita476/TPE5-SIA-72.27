@@ -145,28 +145,34 @@ def main():
         return
 
     if arch_variants:
-        # --- Architecture comparison (fixed noise type) ----------------------
+        # --- Variant comparison (architecture / activation / depth / ...) ----
+        # Each variant merges arbitrary overrides onto the base under a fixed
+        # noise type. Output name/label/title are config-driven so the same
+        # mechanism serves the bottleneck, hidden-width, depth and activation
+        # studies.
         noise_type = cfg.get("noise_type", "gaussian")
         out_dir = os.path.join(out_root, "arch_compare")
         os.makedirs(out_dir, exist_ok=True)
-        print(f"Arch comparison | noise={noise_type} | seeds={seed_list} "
-              f"| workers={args.workers}")
+        name_out = cfg.get("compare_name", "denoising_arch_comparison")
+        label_col = cfg.get("compare_label", "architecture")
+        title = cfg.get("compare_title", "Denoising por arquitectura")
+        print(f"Variant comparison '{name_out}' | noise={noise_type} "
+              f"| seeds={seed_list} | workers={args.workers}")
 
         grouped = {}
         for v in arch_variants:
             name = v["name"]
             b = dict(base)
-            b["layer_dims"] = v["layer_dims"]
-            print(f"  -> {name}: {v['layer_dims']}")
+            b.update({k: val for k, val in v.items() if k != "name"})
+            print(f"  -> {name}")
             grouped[name] = multiseed.run_denoising_seeds(
                 b, X, levels, noise_type, seed_list, workers=args.workers)
 
         curve_path = multiseed.plot_noise_compare_bands(
-            grouped, os.path.join(out_dir, "denoising_arch_comparison.png"),
-            title=f"Denoising por arquitectura ({noise_type}) — media ± desv. "
-                  f"({len(seed_list)} seeds)")
-        csv_path = os.path.join(out_dir, "denoising_arch_comparison.csv")
-        _write_csv(grouped, levels, "architecture", csv_path)
+            grouped, os.path.join(out_dir, name_out + ".png"),
+            title=f"{title} ({noise_type}) — media ± desv. ({len(seed_list)} seeds)")
+        csv_path = os.path.join(out_dir, name_out + ".csv")
+        _write_csv(grouped, levels, label_col, csv_path)
     else:
         # --- Noise-type comparison (default) ---------------------------------
         out_dir = out_nc

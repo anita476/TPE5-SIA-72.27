@@ -1,0 +1,32 @@
+{
+    "layer_dims":       [35, 50, 6, 50, 35],
+    "activation":       "relu",
+    "optimizer":        "adam",
+    "loss":             "bce",
+    "seed":             42,
+    "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "epochs":           20000,
+    "lr":               0.0005,
+    "batch_size":       8,
+    "log_every":        0,
+    "patience":         5000,
+    "min_delta":        1e-6,
+    "threshold":        0.5,
+    "max_errors":       1,
+    "autoencoder_type": "denoising",
+    "noise_type":       "salt_pepper",
+    "noise_level":      0.2,
+    "noise_levels":     [0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
+    "compare_name":     "denoising_hidden_comparison",
+    "compare_label":    "hidden_width",
+    "compare_title":    "Denoising por ancho de capas ocultas",
+    "font":             "data/font.h",
+    "out":              "output/denoising",
+    "arch_variants": [
+        {"name": "ocultas 24",  "layer_dims": [35, 24,  6, 24,  35]},
+        {"name": "ocultas 35",  "layer_dims": [35, 35,  6, 35,  35]},
+        {"name": "ocultas 50",  "layer_dims": [35, 50,  6, 50,  35]},
+        {"name": "ocultas 70",  "layer_dims": [35, 70,  6, 70,  35]},
+        {"name": "ocultas 100", "layer_dims": [35, 100, 6, 100, 35]}
+    ]
+}

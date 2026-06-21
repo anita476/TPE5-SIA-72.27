@@ -1,0 +1,30 @@
+{
+    "layer_dims":       [35, 50, 6, 50, 35],
+    "activation":       "relu",
+    "optimizer":        "adam",
+    "loss":             "bce",
+    "seed":             42,
+    "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "epochs":           20000,
+    "lr":               0.0005,
+    "batch_size":       8,
+    "log_every":        0,
+    "patience":         5000,
+    "min_delta":        1e-6,
+    "threshold":        0.5,
+    "max_errors":       1,
+    "autoencoder_type": "denoising",
+    "noise_type":       "salt_pepper",
+    "noise_level":      0.2,
+    "noise_levels":     [0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
+    "compare_name":     "denoising_depth_comparison",
+    "compare_label":    "depth",
+    "compare_title":    "Denoising por profundidad",
+    "font":             "data/font.h",
+    "out":              "output/denoising",
+    "arch_variants": [
+        {"name": "0 ocultas", "layer_dims": [35, 6, 35]},
+        {"name": "1 oculta",  "layer_dims": [35, 50, 6, 50, 35]},
+        {"name": "2 ocultas", "layer_dims": [35, 50, 24, 6, 24, 50, 35]}
+    ]
+}
