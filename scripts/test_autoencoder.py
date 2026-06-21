@@ -101,6 +101,8 @@ def _run_multiseed(base, X, labels, out_dir, seed_list, workers, latent_show):
         title=f"Errores por carácter — media ± desv. ({n} seeds)")
     latent_path = multiseed.plot_latent_seeds(
         results, os.path.join(out_dir, "latent_seeds.png"), n_show=latent_show)
+    latent_single_path = multiseed.plot_latent_single(
+        results[0], os.path.join(out_dir, "latent_single.png"))
     summary, csv_path = _write_summary_csv(results, out_dir)
 
     print("\n=== Resumen multi-seed ===")
@@ -111,6 +113,7 @@ def _run_multiseed(base, X, labels, out_dir, seed_list, workers, latent_show):
     print(f"\nLoss   -> {loss_path}")
     print(f"Errors -> {err_path}")
     print(f"Latent -> {latent_path}")
+    print(f"Latent (single) -> {latent_single_path}")
     print(f"CSV    -> {csv_path}")
 
 

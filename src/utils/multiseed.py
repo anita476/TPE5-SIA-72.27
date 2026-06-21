@@ -439,6 +439,31 @@ def plot_latent_seeds(results, out_path, n_show=6, title="Espacio latente por se
     return out_path
 
 
+def plot_latent_single(result, out_path,
+                       title="Espacio latente (seed {seed})"):
+    """Full-size scatter of the dataset in latent space for a single seed.
+
+    Clearer than the multi-seed grid when the goal is legibility on a slide.
+    """
+    z = result.latent
+    seed = result.params.get("seed")
+    fig, ax = plt.subplots(figsize=(7.5, 6.5))
+    ax.scatter(z[:, 0], z[:, 1], c=np.arange(len(z)), cmap="tab20",
+               s=140, zorder=3, edgecolor="white", linewidth=0.6)
+    for i, label in enumerate(result.labels):
+        ax.annotate(label, (z[i, 0], z[i, 1]), fontsize=10, ha="center",
+                    va="bottom", xytext=(0, 7), textcoords="offset points")
+    ax.set_xlabel("z1")
+    ax.set_ylabel("z2")
+    ax.set_title(title.format(seed=seed) +
+                 f"  ({result.passed}/{len(z)} aprendidos)", fontsize=12)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
+
+
 def plot_interpolation_seeds(models, X, labels, idx_a, idx_b, out_path,
                              steps=9, threshold=0.5):
     """Rows = seeds, columns = interpolation steps between two characters."""
