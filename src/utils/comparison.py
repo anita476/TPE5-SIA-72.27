@@ -21,7 +21,7 @@ def _write_multiseed_csv(grouped, out_dir):
         writer = csv.writer(fh)
         writer.writerow([
             "variant", "n_seeds", "passed_mean", "passed_std",
-            "avg_err_mean", "avg_err_std", "final_mse_mean",
+            "avg_err_mean", "avg_err_std", "final_loss_mean",
         ])
         for name, results in grouped.items():
             passed = [r.passed for r in results]

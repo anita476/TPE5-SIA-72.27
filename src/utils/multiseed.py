@@ -289,7 +289,7 @@ def plot_compare_metric_bars(results_by_variant, total, out_path, max_errors):
         for i, key in enumerate(VARIANT_KEY_ORDER):
             if key.replace("_", "") in name_lower.replace("_", "").replace(" ", ""):
                 return (i, name)
-        return (len(VARIANT_KEY_ORDER), name)
+        return len(VARIANT_KEY_ORDER), name
 
     names = sorted(results_by_variant.keys(), key=sort_key)
 
