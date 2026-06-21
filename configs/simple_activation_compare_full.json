@@ -1,0 +1,28 @@
+{
+    "font":             "data/font.h",
+    "autoencoder_type": "simple",
+    "out":              "output/simple_activation_compare",
+
+    "layer_dims":       [35, 16, 2, 16, 35],
+    "activation":       "tanh",
+    "weight_init":      "xavier",
+    "optimizer":        "adam",
+    "loss":             "mse",
+    "seed":             1,
+    "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "epochs":           30000,
+    "lr":               0.001,
+    "batch_size":       1,
+    "log_every":        0,
+    "threshold":        0.5,
+    "max_errors":       0,
+
+    "variants": [
+        {"name": "tanh xavier",     "activation": "tanh",    "weight_init": "xavier"},
+        {"name": "tanh he",         "activation": "tanh",    "weight_init": "he"},
+        {"name": "sigmoid xavier",  "activation": "sigmoid", "weight_init": "xavier"},
+        {"name": "sigmoid he",      "activation": "sigmoid", "weight_init": "he"},
+        {"name": "relu xavier",     "activation": "relu",    "weight_init": "xavier"},
+        {"name": "relu he",         "activation": "relu",    "weight_init": "he"}
+    ]
+}
