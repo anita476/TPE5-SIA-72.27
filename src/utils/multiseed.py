@@ -284,6 +284,7 @@ VARIANT_KEY_ORDER = [
     "dropout",
     "batch_size",
     "epochs",
+    "weight_init"
 ]
 
 def plot_compare_metric_bars(results_by_variant, total, out_path, max_errors):
