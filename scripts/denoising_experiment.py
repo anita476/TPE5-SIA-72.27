@@ -85,7 +85,8 @@ def main():
     ae = DenoisingAutoencoder(
         base["layer_dims"], base["activation"], seed_list[0],
         noise_type=noise_type, noise_level=base["noise_level"],
-        loss=base["loss"])
+        loss=base["loss"],
+        weight_init=base.get("weight_init", base.get("init", "he")))
     losses = ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
         patience=base["patience"], min_delta=base["min_delta"])

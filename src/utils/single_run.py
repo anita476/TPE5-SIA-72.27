@@ -104,16 +104,17 @@ def execute_run(
     log_every        = params.get("log_every", 0)
     threshold        = params.get("threshold", 0.5)
     max_errors       = params.get("max_errors", 1)
+    weight_init      = params.get("weight_init", params.get("init", "he"))
     patience         = params.get("patience")
     min_delta        = params.get("min_delta", 1e-6)
     write_report     = params.get("write_report", True)
 
     prefix = f"[run {run_id}]"
     print(f"{prefix} autoencoder={autoencoder_type}  activation={activation}  "
-          f"lr={lr}  batch={batch_size}  seed={seed}  epochs={epochs}")
+          f"init={weight_init}  lr={lr}  batch={batch_size}  seed={seed}  epochs={epochs}")
 
     AEClass = resolve_autoencoder(autoencoder_type)
-    ae = AEClass(layer_dims, activation, seed)
+    ae = AEClass(layer_dims, activation, seed, weight_init=weight_init)
     # Optional output loss ("mse"/"bce") for autoencoders that support it.
     if "loss" in params and hasattr(ae, "loss_type"):
         ae.loss_type = params["loss"]
@@ -144,7 +145,7 @@ def execute_run(
             f.write(f"Autoencoder Reconstruction Report  [run {run_id}]\n")
             f.write(f"Autoencoder  : {autoencoder_type} ({AEClass.__name__})\n")
             f.write(f"Architecture : {layer_dims}\n")
-            f.write(f"Activation   : {activation}  |  Optimizer : {optimizer}\n")
+            f.write(f"Activation   : {activation}  |  Optimizer : {optimizer}  |  Init : {weight_init}\n")
             f.write(f"LR: {lr}  |  Batch: {batch_size}  |  Seed: {seed}\n")
             f.write(f"Threshold : {threshold}  |  Epochs: {epochs}\n")
             f.write(f"Passed: {passed}/{len(X)}  |  "

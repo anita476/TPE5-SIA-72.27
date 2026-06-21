@@ -9,6 +9,7 @@ ACTIVATIONS = {
 }
 
 OPTIMIZERS = ("sgd", "adam")
+WEIGHT_INITS = ("he", "xavier")
 
 def mse(y_pred, y_true):
     return np.mean((y_pred - y_true) ** 2)
@@ -16,9 +17,12 @@ def mse(y_pred, y_true):
 def mse_grad(y_pred, y_true):
     return 2 * (y_pred - y_true) / y_true.size
 
-# @todo maybe other weight inits
-def init_weights(fan_in, fan_out, rng):
+def he_init(fan_in, fan_out, rng):
     return rng.standard_normal((fan_in, fan_out)) * np.sqrt(2.0 / fan_in)
+
+
+# Backwards-compatible name used by older code paths.
+init_weights = he_init
 
 
 def xavier_init(fan_in, fan_out, rng):
@@ -26,7 +30,7 @@ def xavier_init(fan_in, fan_out, rng):
     return rng.uniform(-limit, limit, (fan_in, fan_out))
 
 class Autoencoder:
-    def __init__(self, layer_dims, activation, seed=None):
+    def __init__(self, layer_dims, activation, seed=None, weight_init="he"):
         """
         layer_dims : list of int, the middle value is the bottleneck
         """
@@ -39,6 +43,9 @@ class Autoencoder:
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.bottleneck_idx = len(layer_dims) // 2
+        self.weight_init = weight_init.lower()
+        if self.weight_init not in WEIGHT_INITS:
+            raise ValueError(f"Unknown weight_init '{weight_init}'. Choose from: {list(WEIGHT_INITS)}")
 
         self._init_weights()
         self._init_adam_state()
@@ -46,9 +53,10 @@ class Autoencoder:
     def _init_weights(self):
         self.weights = []
         self.biases = []
+        init_fn = xavier_init if self.weight_init == "xavier" else he_init
         for i in range(len(self.layer_dims) - 1):
             self.weights.append(
-                init_weights(self.layer_dims[i], self.layer_dims[i + 1], self.rng)
+                init_fn(self.layer_dims[i], self.layer_dims[i + 1], self.rng)
             )
             self.biases.append(np.zeros((1, self.layer_dims[i + 1])))
 

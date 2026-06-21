@@ -120,6 +120,7 @@ def _denoising_seed_worker(args):
         base["layer_dims"], base["activation"], seed,
         noise_type=noise_type, noise_level=base["noise_level"],
         loss=base.get("loss", "mse"),
+        weight_init=base.get("weight_init", base.get("init", "he")),
     )
     ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
@@ -162,7 +163,8 @@ def run_noise_type_seeds(base, X, noise_levels, noise_types, seeds, workers=1):
 def _simple_model_worker(args):
     seed, base, X = args
     ae = SimpleAutoencoder(base["layer_dims"], base["activation"], seed,
-                           loss=base.get("loss", "mse"))
+                           loss=base.get("loss", "mse"),
+                           weight_init=base.get("weight_init", base.get("init", "he")))
     ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
         patience=base.get("patience"), min_delta=base.get("min_delta", 1e-6),
@@ -347,7 +349,7 @@ def plot_compare_metric_bars(results_by_variant, total, out_path, max_errors):
     ax2.set_xticks(x)
     ax2.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
     ax2.set_ylabel("Avg pixel error (mean ± std)")
-    ax2.set_title(f"Average reconstruction error  [max errors = {total}]")
+    ax2.set_title(f"Average reconstruction error  [ pixels after thresholding ]")
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)

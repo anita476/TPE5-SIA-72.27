@@ -14,8 +14,9 @@ class DenoisingAutoencoder(SimpleAutoencoder):
         noise_level: float = 0.3,
         noise_seed=None,
         loss: str = "mse",
+        weight_init: str = "he",
     ):
-        super().__init__(layer_dims, activation, seed, loss=loss)
+        super().__init__(layer_dims, activation, seed, loss=loss, weight_init=weight_init)
         self.noise_type = noise_type
         self.noise_level = noise_level
         self._noise_rng = np.random.default_rng(

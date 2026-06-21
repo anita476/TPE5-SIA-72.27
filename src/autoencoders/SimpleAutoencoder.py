@@ -9,8 +9,8 @@ def bce(y_pred, y_true, eps=1e-8):
 
 
 class SimpleAutoencoder(Autoencoder):
-    def __init__(self, layer_dims, activation, seed, loss="mse"):
-        super().__init__(layer_dims, activation, seed)
+    def __init__(self, layer_dims, activation, seed, loss="mse", weight_init="he"):
+        super().__init__(layer_dims, activation, seed, weight_init=weight_init)
         # Output loss: "mse" (default) or "bce". With a sigmoid output, BCE
         # penalises confident-wrong pixels far harder than MSE, pushing the
         # reconstructions decisively toward 0/1 and reducing borderline pixels.

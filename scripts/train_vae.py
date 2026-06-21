@@ -40,6 +40,7 @@ def train_and_evaluate(X, cfg, seed):
         activation=cfg.get("activation", "relu"),
         seed=seed,
         recon_loss=cfg.get("recon_loss", "mse"),
+        weight_init=cfg.get("weight_init", cfg.get("init", "xavier")),
     )
     total, recon, kl = vae.train(
         X, cfg["epochs"], cfg["lr"],
@@ -672,7 +673,8 @@ def main():
     # ---- Plain AE for comparison (best 2-D config only) --------------------
     print("\nTraining plain AE for latent space comparison...")
     ae = SimpleAutoencoder(best_cfg["layer_dims"],
-                           activation="tanh", seed=42)
+                           activation="tanh", seed=42,
+                           weight_init=best_cfg.get("weight_init", best_cfg.get("init", "he")))
     ae.train(X, epochs=shared["epochs"], lr=shared["lr"],
              batch_size=shared.get("batch_size", 20), log_every=shared.get("log_every", 500),
              optimizer=shared.get("optimizer", "adam"),

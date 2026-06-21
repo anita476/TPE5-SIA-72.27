@@ -48,6 +48,7 @@ def _plot_run(result: RunResult, out_dir: str, max_errors: int) -> tuple[str, st
         f"run {rid} | lr={result.params.get('lr')} "
         f"bs={result.params.get('batch_size')} "
         f"act={result.params.get('activation')} "
+        f"init={result.params.get('weight_init', result.params.get('init', 'he'))} "
         f"seed={result.params.get('seed')}"
     )
 
@@ -56,7 +57,7 @@ def _plot_run(result: RunResult, out_dir: str, max_errors: int) -> tuple[str, st
     ax.plot(result.epoch_losses, linewidth=0.8, color="steelblue")
     ax.set_title(f"Training Loss\n{title_suffix}", fontsize=8)
     ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE")
+    ax.set_ylabel(str(result.params.get("loss", "mse")).upper())
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     loss_path = os.path.join(out_dir, f"loss_{rid}.png")

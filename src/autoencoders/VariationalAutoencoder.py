@@ -1,6 +1,7 @@
 import numpy as np
 from autoencoders.Autoencoder import (
     Autoencoder,
+    he_init,
     xavier_init,
     sigmoid,
     sigmoid_grad,
@@ -13,14 +14,15 @@ class VariationalAutoencoder(Autoencoder):
     Standard VAE loss = recon + KL (Kingma & Welling, 2014).
     """
 
-    def __init__(self, layer_dims, activation, seed=None, recon_loss="mse"):
+    def __init__(self, layer_dims, activation, seed=None, recon_loss="mse", weight_init="xavier"):
         self.recon_loss = recon_loss
-        super().__init__(layer_dims, activation, seed)
+        super().__init__(layer_dims, activation, seed, weight_init=weight_init)
 
     # Weight initialisation                                              #
     def _add_layer(self, fan_in, fan_out):
         """Append one (weight, bias) pair to the flat parameter lists."""
-        self.weights.append(xavier_init(fan_in, fan_out, self.rng))
+        init_fn = xavier_init if self.weight_init == "xavier" else he_init
+        self.weights.append(init_fn(fan_in, fan_out, self.rng))
         self.biases.append(np.zeros((1, fan_out)))
 
     def _init_weights(self):

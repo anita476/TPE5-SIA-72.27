@@ -449,6 +449,7 @@ def main():
     vae = VariationalAutoencoder(
         cfg["layer_dims"], activation=cfg["activation"],
         seed=cfg["seed"], recon_loss=cfg.get("recon_loss", "mse"),
+        weight_init=cfg.get("weight_init", cfg.get("init", "xavier")),
     )
     vae.train(
         X, cfg["epochs"], cfg["lr"],

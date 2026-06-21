@@ -1,6 +1,7 @@
 {
     "layer_dims":       [35, 50, 6, 50, 35],
     "activation":       "relu",
+    "weight_init":      "he",
     "optimizer":        "adam",
     "loss":             "bce",
     "seed":             42,
