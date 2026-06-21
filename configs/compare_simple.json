@@ -6,7 +6,7 @@
     "layer_dims":       [35, 30, 15, 2, 15, 30, 35],
     "activation":       "tanh",
     "optimizer":        "adam",
-    "loss":             "mse",
+    "loss":             "bce",
     "seed":             0,
     "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     "epochs":           30000,

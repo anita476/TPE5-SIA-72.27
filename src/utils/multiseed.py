@@ -250,6 +250,8 @@ def plot_compare_loss_bands(results_by_variant, out_path,
                             title="Training loss comparison (media ± desv.)"):
     fig, ax = plt.subplots(figsize=(8, 5))
     cmap = plt.get_cmap("tab10")
+    first = next(iter(results_by_variant.values()))
+    loss_name = str(first[0].params.get("loss", "mse")).upper()
     for i, (name, results) in enumerate(results_by_variant.items()):
         arr = stack_losses(results)
         mean, std = arr.mean(axis=0), arr.std(axis=0)
@@ -259,7 +261,7 @@ def plot_compare_loss_bands(results_by_variant, out_path,
         ax.fill_between(x, mean - std, mean + std, color=c, alpha=0.18)
     ax.set_yscale("log")
     ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE (log scale)")
+    ax.set_ylabel(f"{loss_name} (log scale)")
     ax.set_title(title, fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)

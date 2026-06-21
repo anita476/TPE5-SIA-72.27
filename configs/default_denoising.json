@@ -2,7 +2,7 @@
     "layer_dims":       [35, 50, 24, 50, 35],
     "activation":       "relu",
     "optimizer":        "adam",
-    "loss":             "mse",
+    "loss":             "bce",
     "seed":             42,
     "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     "epochs":           20000,
