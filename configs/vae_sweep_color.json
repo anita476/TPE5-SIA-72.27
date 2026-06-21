@@ -18,6 +18,21 @@
       {"layer_dims": [1200, 512, 256, 2, 256, 512, 1200]}
     ]
   },
+  "lr_sweep": {
+    "description": "Sweep C: vary learning rate for [1200, 256, L, 256, 1200], latent_dim 2 and 4",
+    "configs": [
+      {"layer_dims": [1200, 256, 2, 256, 1200], "lr": 1e-4},
+      {"layer_dims": [1200, 256, 2, 256, 1200], "lr": 5e-4},
+      {"layer_dims": [1200, 256, 2, 256, 1200], "lr": 1e-3},
+      {"layer_dims": [1200, 256, 2, 256, 1200], "lr": 5e-3},
+      {"layer_dims": [1200, 256, 2, 256, 1200], "lr": 1e-2},
+      {"layer_dims": [1200, 256, 4, 256, 1200], "lr": 1e-4},
+      {"layer_dims": [1200, 256, 4, 256, 1200], "lr": 5e-4},
+      {"layer_dims": [1200, 256, 4, 256, 1200], "lr": 1e-3},
+      {"layer_dims": [1200, 256, 4, 256, 1200], "lr": 5e-3},
+      {"layer_dims": [1200, 256, 4, 256, 1200], "lr": 1e-2}
+    ]
+  },
   "shared": {
     "activation": "tanh",
     "lr": 1e-3,
