@@ -1,113 +1,67 @@
-"""Compare several autoencoder variants under the same budget.
+"""Compare several autoencoder variants under the same budget, aggregated over
+several seeds (mean ± std).
 
 Each variant is a full hyperparameter dict (built by merging per-variant
-overrides onto a common base). Reuses ``single_run.execute_run`` to train and
-evaluate, and produces overlaid loss curves, a metric bar chart and a CSV.
+overrides onto a common base). Delegates the per-(variant, seed) training and
+the aggregated plots to :mod:`utils.multiseed`.
 """
 from __future__ import annotations
 
 import csv
 import os
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import numpy as np
 
-from utils import plot_style
-from utils.single_run import execute_run
+from utils import multiseed
 
 
-def run_variants(variants, base, X, labels, out_dir):
-    """Train/evaluate each variant. Returns a list of (name, RunResult)."""
-    os.makedirs(out_dir, exist_ok=True)
-    results = []
-    for i, var in enumerate(variants, start=1):
-        name = var.get("name", f"variant_{i}")
-        params = dict(base)
-        params.update({k: v for k, v in var.items() if k != "name"})
-        print(f"\n=== variant {i}/{len(variants)}: {name} ===")
-        res = execute_run(i, params, X, labels, out_dir)
-        results.append((name, res))
-    return results
-
-
-def plot_loss_curves(results, out_dir):
-    fig, ax = plt.subplots(figsize=(8, 5))
-    for name, r in results:
-        ax.plot(r.epoch_losses, linewidth=0.9, label=name)
-    ax.set_yscale("log")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE (log scale)")
-    ax.set_title("Training loss comparison")
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8)
-    plt.tight_layout()
-    path = os.path.join(out_dir, "compare_loss.png")
-    plt.savefig(path, dpi=150)
-    plt.close(fig)
-    return path
-
-
-def plot_metric_bars(results, out_dir, total):
-    names = [n for n, _ in results]
-    passed = [r.passed for _, r in results]
-    avg_err = [r.avg_pixel_errors for _, r in results]
-    x = range(len(names))
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5))
-    ax1.bar(x, passed, color="seagreen", edgecolor="black")
-    ax1.axhline(total, color="gray", linestyle="--", label=f"total ({total})")
-    ax1.set_xticks(list(x))
-    ax1.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
-    ax1.set_ylabel("Passed (<= max_errors)")
-    ax1.set_title("Characters learned")
-    ax1.legend(fontsize=8)
-
-    ax2.bar(x, avg_err, color="indianred", edgecolor="black")
-    ax2.set_xticks(list(x))
-    ax2.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
-    ax2.set_ylabel("Avg pixel error")
-    ax2.set_title("Average reconstruction error")
-
-    plt.tight_layout()
-    path = os.path.join(out_dir, "compare_metrics.png")
-    plt.savefig(path, dpi=150)
-    plt.close(fig)
-    return path
-
-
-def write_csv(results, out_dir):
+def _write_multiseed_csv(grouped, out_dir):
     path = os.path.join(out_dir, "compare_results.csv")
     with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow([
-            "variant", "layer_dims", "optimizer", "lr", "epochs_run",
-            "passed", "failed", "avg_pixel_errors", "final_mse",
+            "variant", "n_seeds", "passed_mean", "passed_std",
+            "avg_err_mean", "avg_err_std", "final_mse_mean",
         ])
-        for name, r in results:
+        for name, results in grouped.items():
+            passed = [r.passed for r in results]
+            avg_err = [r.avg_pixel_errors for r in results]
+            final = [r.epoch_losses[-1] for r in results if r.epoch_losses]
             writer.writerow([
-                name, r.params.get("layer_dims"), r.params.get("optimizer"),
-                r.params.get("lr"), len(r.epoch_losses), r.passed, r.failed,
-                round(r.avg_pixel_errors, 4),
-                round(r.epoch_losses[-1], 6) if r.epoch_losses else "",
+                name, len(results),
+                round(float(np.mean(passed)), 3), round(float(np.std(passed)), 3),
+                round(float(np.mean(avg_err)), 4), round(float(np.std(avg_err)), 4),
+                round(float(np.mean(final)), 6) if final else "",
             ])
     return path
 
 
-def run_comparison(variants, base, X, labels, out_dir):
-    """End-to-end: train variants and write all comparison artefacts."""
-    results = run_variants(variants, base, X, labels, out_dir)
-    loss_path = plot_loss_curves(results, out_dir)
-    bars_path = plot_metric_bars(results, out_dir, total=len(X))
-    csv_path = write_csv(results, out_dir)
+def run_comparison(variants, base, X, labels, out_dir, seeds, workers=1):
+    """End-to-end: train each variant over several seeds and write all
+    comparison artefacts with mean ± std. ``seeds`` is an explicit list."""
+    seed_list = list(seeds)
+    print(f"Comparison over seeds={seed_list} | workers={workers}")
 
-    print(f"\n{'variant':<16} {'passed':>7} {'avg_err':>8} {'final_mse':>11}")
-    print("-" * 46)
-    for name, r in results:
-        final = r.epoch_losses[-1] if r.epoch_losses else float("nan")
-        print(f"{name:<16} {r.passed:>4}/{len(X)} "
-              f"{r.avg_pixel_errors:>8.2f} {final:>11.6f}")
+    grouped = multiseed.run_variant_seeds(
+        variants, base, X, list(labels), seed_list, out_dir, workers=workers)
+    # Preserve the variants' declared order.
+    ordered = {v.get("name", f"variant_{i}"): grouped[v.get("name", f"variant_{i}")]
+               for i, v in enumerate(variants, start=1)}
+
+    loss_path = multiseed.plot_compare_loss_bands(
+        ordered, os.path.join(out_dir, "compare_loss.png"))
+    bars_path = multiseed.plot_compare_metric_bars(
+        ordered, len(X), os.path.join(out_dir, "compare_metrics.png"))
+    csv_path = _write_multiseed_csv(ordered, out_dir)
+
+    print(f"\n{'variant':<16} {'passed (mean±std)':>20} {'avg_err (mean±std)':>22}")
+    print("-" * 60)
+    for name, results in ordered.items():
+        passed = [r.passed for r in results]
+        avg_err = [r.avg_pixel_errors for r in results]
+        print(f"{name:<16} {np.mean(passed):>8.1f} ± {np.std(passed):<5.1f}/{len(X)}"
+              f"   {np.mean(avg_err):>8.2f} ± {np.std(avg_err):<5.2f}")
     print(f"\nLoss   -> {loss_path}")
     print(f"Bars   -> {bars_path}")
     print(f"CSV    -> {csv_path}")
-    return results
+    return ordered

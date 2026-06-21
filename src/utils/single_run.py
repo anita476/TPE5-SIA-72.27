@@ -106,6 +106,7 @@ def execute_run(
     max_errors       = params.get("max_errors", 1)
     patience         = params.get("patience")
     min_delta        = params.get("min_delta", 1e-6)
+    write_report     = params.get("write_report", True)
 
     prefix = f"[run {run_id}]"
     print(f"{prefix} autoencoder={autoencoder_type}  activation={activation}  "
@@ -132,21 +133,23 @@ def execute_run(
     print(f"{prefix} done — passed {passed}/{len(X)}, "
           f"avg_err={avg_err:.2f}, max_err={max_err}")
 
-    # write reconstruction.txt
-    reconstruction_path = os.path.join(out_dir, f"reconstruction_{run_id}.txt")
-    with open(reconstruction_path, "w", encoding="utf-8") as f:
-        f.write(f"Autoencoder Reconstruction Report  [run {run_id}]\n")
-        f.write(f"Autoencoder  : {autoencoder_type} ({AEClass.__name__})\n")
-        f.write(f"Architecture : {layer_dims}\n")
-        f.write(f"Activation   : {activation}  |  Optimizer : {optimizer}\n")
-        f.write(f"LR: {lr}  |  Batch: {batch_size}  |  Seed: {seed}\n")
-        f.write(f"Threshold : {threshold}  |  Epochs: {epochs}\n")
-        f.write(f"Passed: {passed}/{len(X)}  |  "
-                f"Avg errors: {avg_err:.2f}  |  Max errors: {max_err}\n")
-        f.write("=" * 50 + "\n\n")
-        for i, (label, err) in enumerate(zip(labels, errors)):
-            block = _format_bitmap_side_by_side(X[i], reconstructed_bin[i], label, int(err))
-            f.write(block + "\n")
+    # write reconstruction.txt (skipped in multi-seed runs to avoid clutter)
+    reconstruction_path = ""
+    if write_report:
+        reconstruction_path = os.path.join(out_dir, f"reconstruction_{run_id}.txt")
+        with open(reconstruction_path, "w", encoding="utf-8") as f:
+            f.write(f"Autoencoder Reconstruction Report  [run {run_id}]\n")
+            f.write(f"Autoencoder  : {autoencoder_type} ({AEClass.__name__})\n")
+            f.write(f"Architecture : {layer_dims}\n")
+            f.write(f"Activation   : {activation}  |  Optimizer : {optimizer}\n")
+            f.write(f"LR: {lr}  |  Batch: {batch_size}  |  Seed: {seed}\n")
+            f.write(f"Threshold : {threshold}  |  Epochs: {epochs}\n")
+            f.write(f"Passed: {passed}/{len(X)}  |  "
+                    f"Avg errors: {avg_err:.2f}  |  Max errors: {max_err}\n")
+            f.write("=" * 50 + "\n\n")
+            for i, (label, err) in enumerate(zip(labels, errors)):
+                block = _format_bitmap_side_by_side(X[i], reconstructed_bin[i], label, int(err))
+                f.write(block + "\n")
 
     return RunResult(
         run_id           = run_id,

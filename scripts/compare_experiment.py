@@ -21,6 +21,11 @@ from utils.font_loader import load_font
 def main():
     parser = argparse.ArgumentParser(description="Autoencoder comparison study")
     parser.add_argument("--config", required=True, help="Path to JSON config.")
+    parser.add_argument("--seeds", type=int, default=10,
+                        help="Fallback seed count [1..N] when the config has no "
+                             "\"seeds\" list.")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Simultaneous runs (1 = sequential).")
     args = parser.parse_args()
 
     cfg = load_config(resolve(args.config))
@@ -32,10 +37,12 @@ def main():
     X, _, labels = load_font(resolve(cfg.get("font", "data/font.h")))
 
     base = {k: v for k, v in cfg.items()
-            if k not in ("variants", "font", "out", "grid")}
+            if k not in ("variants", "font", "out", "grid", "seeds")}
+    seed_list = cfg.get("seeds") or list(range(1, args.seeds + 1))
 
     print(f"Loaded {len(X)} characters  |  {len(variants)} variant(s)")
-    run_comparison(variants, base, X, list(labels), out_dir)
+    run_comparison(variants, base, X, list(labels), out_dir,
+                   seeds=seed_list, workers=args.workers)
 
 
 if __name__ == "__main__":

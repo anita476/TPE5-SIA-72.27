@@ -232,18 +232,18 @@ def run_grid(
     max_errors = combinations[0].get("max_errors", 1) if combinations else 1
 
     print(f"\n{'='*60}")
-    print("Generating plots …")
+    print("Generating plots ...")
     for r in sorted(results, key=lambda x: x.run_id):
         loss_path, latent_path, errors_path = _plot_run(r, out_dir, max_errors)
         r.plot_path = loss_path  # store the first path for backwards compat
-        print(f"  [run {r.run_id}] loss   → {loss_path}")
-        print(f"  [run {r.run_id}] latent → {latent_path}")
-        print(f"  [run {r.run_id}] errors → {errors_path}")
+        print(f"  [run {r.run_id}] loss   -> {loss_path}")
+        print(f"  [run {r.run_id}] latent -> {latent_path}")
+        print(f"  [run {r.run_id}] errors -> {errors_path}")
 
 
-    print("Writing CSV …")
+    print("Writing CSV ...")
     csv_path = _write_csv(results, out_dir)
-    print(f"  → {csv_path}")
+    print(f"  -> {csv_path}")
 
     print(f"\n{'='*60}")
     print(f"{'ID':>4}  {'LR':>8}  {'BS':>4}  {'Act':<8}  {'Seed':>6}  "
