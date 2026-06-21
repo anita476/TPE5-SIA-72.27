@@ -262,11 +262,31 @@ def latent_traversal_annotated(vae, X, labels, idx1, idx2,
 
 # ── 2-D latent grid ─────────────────────────────────────────────────────────
 
-def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""):
+def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False,
+                       prefix="", X=None):
+    """Decode a 2-D grid over the latent space.
+
+    For latent_dim==2 this sweeps both dimensions.
+    For latent_dim>2 it picks the two dimensions with highest KL (most
+    informative), sweeps those, and holds the rest at 0.
+    """
     latent_dim = vae.layer_dims[vae.bottleneck_idx]
-    if latent_dim != 2:
-        print(f"  Skipping latent grid (latent_dim={latent_dim}, need 2)")
-        return None
+
+    # Pick which two dimensions to sweep
+    if latent_dim == 2:
+        dim_a, dim_b = 0, 1
+        subtitle = ""
+    else:
+        # Use KL-per-dim to find the two most informative dimensions
+        if X is not None:
+            vae.forward(X)
+            kl_per = vae.kl_per_dim(vae._mu, vae._logvar)
+            top2 = np.argsort(kl_per)[-2:][::-1]
+        else:
+            top2 = np.array([0, 1])
+        dim_a, dim_b = int(top2[0]), int(top2[1])
+        subtitle = f" (dims {dim_a},{dim_b} of {latent_dim}; others=0)"
+        print(f"  Using latent dims {dim_a},{dim_b} (highest KL)")
 
     z1 = np.linspace(-z_range, z_range, grid_size)
     z2 = np.linspace(-z_range, z_range, grid_size)
@@ -278,7 +298,9 @@ def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""
 
     for i, zi in enumerate(reversed(z2)):
         for j, zj in enumerate(z1):
-            z = np.array([[zj, zi]])
+            z = np.zeros((1, latent_dim))
+            z[0, dim_a] = zj
+            z[0, dim_b] = zi
             decoded = vae.decode(z)[0]
             if is_color:
                 img = np.clip(decoded.reshape(ROWS, COLS, 3), 0, 1)
@@ -291,7 +313,10 @@ def latent_grid_decode(vae, grid_size=15, z_range=2.5, is_color=False, prefix=""
         ax.imshow(np.clip(canvas, 0, 1))
     else:
         ax.imshow(canvas, cmap=GRAY_CMAP, vmin=0, vmax=1)
-    ax.set_title(f"Latent Space Grid ({grid_size}x{grid_size}, range=[-{z_range},{z_range}])")
+    ax.set_title(f"Latent Space Grid ({grid_size}x{grid_size}, "
+                 f"range=[-{z_range},{z_range}]){subtitle}")
+    ax.set_xlabel(f"z{dim_a}")
+    ax.set_ylabel(f"z{dim_b}")
     ax.set_xticks([]); ax.set_yticks([])
     plt.tight_layout()
     path = os.path.join(OUT_DIR, f"{prefix}vae_latent_grid.png")

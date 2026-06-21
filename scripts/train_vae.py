@@ -429,6 +429,60 @@ def plot_sweep_errorbar(results, x_label, title, filename, x_values=None):
     return path
 
 
+def plot_latent_dim_tradeoff(results, x_values, n_seeds, prefix=""):
+    """Dual-axis line plot: MSE (down) + KL (up) vs latent dim.
+
+    Shows the reconstruction-regularisation tradeoff and annotates the
+    2-D choice for visualisation.
+    """
+    mse_means = [r["mse_mean"] for r in results]
+    mse_stds  = [r["mse_std"]  for r in results]
+    kl_means  = [r["kl_mean"]  for r in results]
+    kl_stds   = [r["kl_std"]   for r in results]
+
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    ax2 = ax1.twinx()
+
+    # MSE on left axis
+    ax1.errorbar(x_values, mse_means, yerr=mse_stds, fmt="o-", capsize=4,
+                 color="steelblue", markersize=7, label="Recon MSE")
+    ax1.set_xlabel("Latent Dimension", fontsize=11)
+    ax1.set_ylabel("Reconstruction MSE", fontsize=11, color="steelblue")
+    ax1.tick_params(axis="y", labelcolor="steelblue")
+
+    # KL on right axis
+    ax2.errorbar(x_values, kl_means, yerr=kl_stds, fmt="s--", capsize=4,
+                 color="darkorange", markersize=7, label="KL Divergence")
+    ax2.set_ylabel("KL Divergence", fontsize=11, color="darkorange")
+    ax2.tick_params(axis="y", labelcolor="darkorange")
+
+    # Mark the 2-D point
+    if 2 in x_values:
+        idx2 = x_values.index(2)
+        ax1.axvline(2, color="gray", ls=":", alpha=0.5)
+        ax1.annotate("latent_dim=2\n(used for plots)",
+                     xy=(2, mse_means[idx2]),
+                     xytext=(2.8, mse_means[idx2]),
+                     fontsize=8, color="gray",
+                     arrowprops=dict(arrowstyle="->", color="gray", lw=0.8))
+
+    ax1.set_xticks(x_values)
+    ax1.grid(True, alpha=0.3)
+
+    # Combined legend
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=9, loc="center right")
+
+    fig.suptitle("Latent Dimension Tradeoff: MSE vs KL\n"
+                 f"(n_seeds={n_seeds})", fontsize=11)
+    plt.tight_layout()
+    path = os.path.join(OUT_DIR, f"{prefix}vae_latent_dim_tradeoff.png")
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def write_tuning_table(all_results, shared, seeds, filename="vae_arch_tuning_table.txt"):
     path = os.path.join(OUT_DIR, filename)
     lines = []
@@ -575,6 +629,10 @@ def main():
         x_values=latent_dims,
     )
     print(f"Latent dim sweep plot -> {p}")
+
+    # Dual-axis MSE vs KL tradeoff plot
+    p = plot_latent_dim_tradeoff(latent_results, latent_dims, len(seeds), prefix)
+    print(f"Latent dim tradeoff plot -> {p}")
 
     # ---- Sweep B: Architecture (depth/width) ------------------------------
     print("\n=== Sweep B: Depth/Width ===")
