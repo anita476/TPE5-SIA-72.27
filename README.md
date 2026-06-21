@@ -137,6 +137,12 @@ Salidas en `output/denoising/noise_compare/`:
 
 - `layer_dims`: arquitectura; el valor central es el cuello de botella.
 - `activation`, `optimizer` (`adam`/`sgd`), `lr`, `batch_size`, `epochs`, `seed`.
+- `loss`: pérdida de salida del autoencoder (básico **y** denoising), `"mse"` o
+  `"bce"`. Con la salida sigmoide, `bce` empuja los píxeles a 0/1 y logra
+  reconstrucción sin error en el 100% de las seeds; `mse` solo en ~40% (algunas
+  letras quedan con píxeles borderline). Tanto la curva de loss como el
+  best-model checkpoint usan la pérdida elegida. Default: `bce` en
+  `default_simple.json`, `mse` en `default_denoising.json`.
 - `seeds`: lista de semillas para el estudio multi-seed, p.ej. `[1, 2, …, 10]`.
 - `patience` / `min_delta`: early stopping (omitir `patience` lo desactiva).
 - `threshold`, `max_errors`: binarización y tolerancia de píxeles.

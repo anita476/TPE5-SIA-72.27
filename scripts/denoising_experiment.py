@@ -33,11 +33,11 @@ from utils.denoising_eval import run_denoising_study
 from utils.font_loader import load_font
 
 
-def _plot_loss(losses, out_dir):
+def _plot_loss(losses, out_dir, loss_name="mse"):
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(losses, linewidth=0.8, color="darkorange")
     ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE (vs clean input)")
+    ax.set_ylabel(f"{loss_name.upper()} (vs clean input)")
     ax.set_title("Denoising Autoencoder training (seed representativa)")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -67,6 +67,7 @@ def main():
         "batch_size": cfg["batch_size"], "patience": cfg.get("patience"),
         "min_delta": cfg.get("min_delta", 1e-6), "threshold": cfg.get("threshold", 0.5),
         "max_errors": cfg.get("max_errors", 1), "noise_level": cfg.get("noise_level", 0.3),
+        "loss": cfg.get("loss", "mse"),
     }
     noise_type = cfg.get("noise_type", "gaussian")
     noise_levels = cfg.get("noise_levels", [0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
@@ -83,11 +84,12 @@ def main():
     # aggregated band below intentionally overwrites as the canonical figure.)
     ae = DenoisingAutoencoder(
         base["layer_dims"], base["activation"], seed_list[0],
-        noise_type=noise_type, noise_level=base["noise_level"])
+        noise_type=noise_type, noise_level=base["noise_level"],
+        loss=base["loss"])
     losses = ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
         patience=base["patience"], min_delta=base["min_delta"])
-    loss_path = _plot_loss(losses, out_dir)
+    loss_path = _plot_loss(losses, out_dir, base["loss"])
     print(f"Loss plot      -> {loss_path}")
     run_denoising_study(
         ae=ae, X=X, labels=list(labels), noise_levels=noise_levels,

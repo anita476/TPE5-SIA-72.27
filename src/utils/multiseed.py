@@ -118,6 +118,7 @@ def _denoising_seed_worker(args):
     ae = DenoisingAutoencoder(
         base["layer_dims"], base["activation"], seed,
         noise_type=noise_type, noise_level=base["noise_level"],
+        loss=base.get("loss", "mse"),
     )
     ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
@@ -159,7 +160,8 @@ def run_noise_type_seeds(base, X, noise_levels, noise_types, seeds, workers=1):
 
 def _simple_model_worker(args):
     seed, base, X = args
-    ae = SimpleAutoencoder(base["layer_dims"], base["activation"], seed)
+    ae = SimpleAutoencoder(base["layer_dims"], base["activation"], seed,
+                           loss=base.get("loss", "mse"))
     ae.train_and_collect(
         X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
         patience=base.get("patience"), min_delta=base.get("min_delta", 1e-6),
@@ -202,6 +204,7 @@ def plot_loss_band(results, out_path, title, logscale=True, color="steelblue"):
     arr = stack_losses(results)
     mean, std = arr.mean(axis=0), arr.std(axis=0)
     x = np.arange(len(mean))
+    loss_name = str(results[0].params.get("loss", "mse")).upper()
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(x, mean, linewidth=1.0, color=color, label="media")
@@ -210,7 +213,7 @@ def plot_loss_band(results, out_path, title, logscale=True, color="steelblue"):
     if logscale:
         ax.set_yscale("log")
     ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE" + (" (log scale)" if logscale else ""))
+    ax.set_ylabel(loss_name + (" (log scale)" if logscale else ""))
     ax.set_title(title, fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)

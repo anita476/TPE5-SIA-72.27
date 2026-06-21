@@ -114,6 +114,9 @@ def execute_run(
 
     AEClass = resolve_autoencoder(autoencoder_type)
     ae = AEClass(layer_dims, activation, seed)
+    # Optional output loss ("mse"/"bce") for autoencoders that support it.
+    if "loss" in params and hasattr(ae, "loss_type"):
+        ae.loss_type = params["loss"]
 
     epoch_losses = ae.train_and_collect(
         X, epochs, lr, batch_size, log_every, optimizer,
