@@ -36,7 +36,7 @@ def _write_multiseed_csv(grouped, out_dir):
     return path
 
 
-def run_comparison(variants, base, X, labels, out_dir, seeds, workers=1):
+def run_comparison(variants, base, X, labels, out_dir, seeds, workers=1,max_errors=1):
     """End-to-end: train each variant over several seeds and write all
     comparison artefacts with mean ± std. ``seeds`` is an explicit list."""
     seed_list = list(seeds)
@@ -51,7 +51,7 @@ def run_comparison(variants, base, X, labels, out_dir, seeds, workers=1):
     loss_path = multiseed.plot_compare_loss_bands(
         ordered, os.path.join(out_dir, "compare_loss.png"))
     bars_path = multiseed.plot_compare_metric_bars(
-        ordered, len(X), os.path.join(out_dir, "compare_metrics.png"))
+        ordered, len(X), os.path.join(out_dir, "compare_metrics.png"),max_errors)
     csv_path = _write_multiseed_csv(ordered, out_dir)
 
     print(f"\n{'variant':<16} {'passed (mean±std)':>20} {'avg_err (mean±std)':>22}")

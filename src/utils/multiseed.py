@@ -269,36 +269,87 @@ def plot_compare_loss_bands(results_by_variant, out_path,
     return out_path
 
 
-def plot_compare_metric_bars(results_by_variant, total, out_path):
-    names = list(results_by_variant.keys())
-    passed_mean = [np.mean([r.passed for r in rs]) for rs in results_by_variant.values()]
-    passed_std = [np.std([r.passed for r in rs]) for rs in results_by_variant.values()]
-    err_mean = [np.mean([r.avg_pixel_errors for r in rs]) for rs in results_by_variant.values()]
-    err_std = [np.std([r.avg_pixel_errors for r in rs]) for rs in results_by_variant.values()]
-    x = range(len(names))
+# Obs!!! Change for ordering according to necessity !
+VARIANT_KEY_ORDER = [
+    "activation",
+    "optimizer",
+    "learning_rate",
+    "layers",
+    "hidden_size",
+    "dropout",
+    "batch_size",
+    "epochs",
+]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5))
-    ax1.bar(x, passed_mean, yerr=passed_std, capsize=3,
-            color="seagreen", edgecolor="black", error_kw={"elinewidth": 0.8})
-    ax1.axhline(total, color="gray", linestyle="--", label=f"total ({total})")
-    ax1.set_xticks(list(x))
+def plot_compare_metric_bars(results_by_variant, total, out_path, max_errors):
+    def sort_key(name):
+        name_lower = name.lower()
+        for i, key in enumerate(VARIANT_KEY_ORDER):
+            if key.replace("_", "") in name_lower.replace("_", "").replace(" ", ""):
+                return (i, name)
+        return (len(VARIANT_KEY_ORDER), name)
+
+    names = sorted(results_by_variant.keys(), key=sort_key)
+
+    passed_mean = [np.mean([r.passed for r in results_by_variant[n]]) for n in names]
+    passed_std  = [np.std( [r.passed for r in results_by_variant[n]]) for n in names]
+    err_mean    = [np.mean([r.avg_pixel_errors for r in results_by_variant[n]]) for n in names]
+    err_std     = [np.std( [r.avg_pixel_errors for r in results_by_variant[n]]) for n in names]
+
+    passed_pct_mean = [m / total * 100 for m in passed_mean]
+    passed_pct_std  = [s / total * 100 for s in passed_std]
+
+    x = np.arange(len(names))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6))
+
+    # ── Left chart: % characters learned ──────────────────────────────────
+    bars1 = ax1.bar(
+        x, passed_pct_mean, yerr=passed_pct_std, capsize=3,
+        color="seagreen", edgecolor="black", error_kw={"elinewidth": 0.8}
+    )
+
+    for bar, mean_val, std_val in zip(bars1, passed_pct_mean, passed_pct_std):
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + (max(passed_pct_std) if passed_pct_std else 0) + 1,
+            f"{mean_val:.1f}%\n±{std_val:.1f}%",
+            ha="center", va="bottom", fontsize=7
+        )
+
+    ax1.set_xticks(x)
     ax1.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
-    ax1.set_ylabel("Passed (media ± desv.)")
-    ax1.set_title("Characters learned")
-    ax1.legend(fontsize=8)
+    ax1.set_ylabel("Passed (% of characters)")
+    ax1.set_ylim(0, 115)
+    ax1.set_title(
+        "Characters learned\n"
+        f"(total: {total} chars · passed if pixel error ≤ {max_errors})",
+        fontsize=10
+    )
 
-    ax2.bar(x, err_mean, yerr=err_std, capsize=3,
-            color="indianred", edgecolor="black", error_kw={"elinewidth": 0.8})
-    ax2.set_xticks(list(x))
+    # ── Right chart: avg pixel error ──────────────────────────────────────
+    bars2 = ax2.bar(
+        x, err_mean, yerr=err_std, capsize=3,
+        color="indianred", edgecolor="black", error_kw={"elinewidth": 0.8}
+    )
+
+    for bar, mean_val, std_val in zip(bars2, err_mean, err_std):
+        ax2.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + (max(err_std) if err_std else 0) + 0.001,
+            f"{mean_val:.3f}\n±{std_val:.3f}",
+            ha="center", va="bottom", fontsize=7
+        )
+
+    ax2.set_xticks(x)
     ax2.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
-    ax2.set_ylabel("Avg pixel error (media ± desv.)")
-    ax2.set_title("Average reconstruction error")
+    ax2.set_ylabel("Avg pixel error (mean ± std)")
+    ax2.set_title(f"Average reconstruction error  [max errors = {total}]")
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path
-
 
 def plot_denoising_band(per_seed, out_path,
                         title="Denoising capability (media ± desv.)"):

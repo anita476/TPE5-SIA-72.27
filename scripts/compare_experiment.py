@@ -42,7 +42,7 @@ def main():
 
     print(f"Loaded {len(X)} characters  |  {len(variants)} variant(s)")
     run_comparison(variants, base, X, list(labels), out_dir,
-                   seeds=seed_list, workers=args.workers)
+                   seeds=seed_list, workers=args.workers, max_errors=cfg.get("max_errors"))
 
 
 if __name__ == "__main__":
