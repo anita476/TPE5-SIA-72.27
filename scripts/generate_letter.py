@@ -16,6 +16,7 @@ import os
 
 from utils.config_loader import load_config
 from utils.font_loader import load_font
+from utils.latent_generate import latent_grid
 from utils import multiseed
 
 
@@ -64,6 +65,12 @@ def main():
         models, X, os.path.join(out_dir, "latent_generated_point_seeds.png"),
         threshold=threshold)
     print(f"Generated point (seeds) -> {point_path}")
+
+    # Full-plane decoded grid for one representative seed (a single-model view:
+    # sweeping the latent plane can't be averaged across seeds).
+    rep_seed, rep_ae = models[0]
+    grid_path = latent_grid(rep_ae, X, out_dir, threshold=threshold)
+    print(f"Latent grid (seed {rep_seed}) -> {grid_path}")
 
 
 if __name__ == "__main__":
