@@ -22,6 +22,7 @@ import numpy as np
 from utils import plot_style  # noqa: F401  (applies the TP plot style on import)
 from utils.single_run import execute_run, RunResult
 from utils.denoising_eval import evaluate_at_level
+from utils.noise import add_noise
 from autoencoders.SimpleAutoencoder import SimpleAutoencoder
 from autoencoders.DenoisingAutoencoder import DenoisingAutoencoder
 
@@ -482,6 +483,169 @@ def plot_generated_point_seeds(models, X, out_path, threshold=0.5):
     fig.suptitle("Carácter generado desde el centroide del latente, por seed",
                  fontsize=11)
     plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Noise-type understanding: qualitative panel, cross-robustness, fair curves
+# ---------------------------------------------------------------------------
+
+def _train_denoise_model(args):
+    seed, base, X, noise_type = args
+    ae = DenoisingAutoencoder(
+        base["layer_dims"], base["activation"], seed,
+        noise_type=noise_type, noise_level=base["noise_level"],
+        loss=base.get("loss", "mse"))
+    ae.train_and_collect(
+        X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
+        patience=base.get("patience"), min_delta=base.get("min_delta", 1e-6))
+    return noise_type, ae
+
+
+def run_denoise_models(base, X, noise_types, seed, workers=1):
+    """Train one DAE per noise type (single seed). Returns {type: model}."""
+    work = [(seed, base, X, t) for t in noise_types]
+    return {t: ae for t, ae in _dispatch(_train_denoise_model, work, workers)}
+
+
+def plot_noise_qualitative(models_by_type, X, labels, level, char_idx, out_path,
+                           noise_seed=0, threshold=0.5):
+    """Clean / noisy / reconstructed for the same chars across noise types."""
+    types = list(models_by_type.keys())
+    n = len(char_idx)
+    rows = 1 + 2 * len(types)
+    fig, axes = plt.subplots(rows, n, figsize=(n * 1.3, rows * 1.25), squeeze=False)
+
+    row_labels = ["Clean"]
+    for c, ci in enumerate(char_idx):
+        axes[0, c].imshow(X[ci].reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+        axes[0, c].set_title(str(labels[ci]), fontsize=9)
+
+    r = 1
+    for t in types:
+        ae = models_by_type[t]
+        rng = np.random.default_rng(noise_seed)
+        row_labels += [f"{t}\nnoisy", f"{t}\nrecon"]
+        for c, ci in enumerate(char_idx):
+            noisy = add_noise(X[ci:ci + 1], level, t, rng)
+            recon = (ae.decode(ae.encode(noisy))[0] >= threshold).astype(np.float32)
+            axes[r, c].imshow(noisy[0].reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+            axes[r + 1, c].imshow(recon.reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+        r += 2
+
+    for i, lab in enumerate(row_labels):
+        axes[i, 0].set_ylabel(lab, fontsize=8, rotation=0, ha="right", va="center")
+    for ax in axes.flat:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    fig.suptitle(f"Tipos de ruido (nivel {level}): limpio / ruidoso / reconstruido",
+                 fontsize=12)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def _cross_robust_worker(args):
+    seed, base, X, train_type, test_types, level = args
+    ae = DenoisingAutoencoder(
+        base["layer_dims"], base["activation"], seed,
+        noise_type=train_type, noise_level=base["noise_level"],
+        loss=base.get("loss", "mse"))
+    ae.train_and_collect(
+        X, base["epochs"], base["lr"], base["batch_size"], 0, base["optimizer"],
+        patience=base.get("patience"), min_delta=base.get("min_delta", 1e-6))
+    rng = np.random.default_rng(seed + 9973)
+    row = {}
+    for tt in test_types:
+        res = evaluate_at_level(ae, X, level, tt, rng,
+                                base.get("threshold", 0.5), base.get("max_errors", 1))
+        row[tt] = res["avg_err"]
+    return train_type, row
+
+
+def run_cross_robustness(base, X, noise_types, level, seeds, workers=1):
+    """Train on each type, test on every type. Returns mean recon-error matrix
+    as a nested dict ``{train_type: {test_type: mean_err}}``."""
+    nts = list(noise_types)
+    work = [(s, base, X, A, nts, level) for A in nts for s in seeds]
+    raw = _dispatch(_cross_robust_worker, work, workers)
+    acc = {A: {B: [] for B in nts} for A in nts}
+    for A, row in raw:
+        for B, v in row.items():
+            acc[A][B].append(v)
+    return {A: {B: float(np.mean(vs)) for B, vs in d.items()} for A, d in acc.items()}
+
+
+def plot_cross_robustness(matrix, noise_types, level, out_path):
+    nts = list(noise_types)
+    M = np.array([[matrix[A][B] for B in nts] for A in nts])
+    fig, ax = plt.subplots(figsize=(6.2, 5.2))
+    im = ax.imshow(M, cmap="YlOrRd")
+    ax.set_xticks(range(len(nts)))
+    ax.set_xticklabels(nts, rotation=20, ha="right")
+    ax.set_yticks(range(len(nts)))
+    ax.set_yticklabels(nts)
+    ax.set_xlabel("Testeado en")
+    ax.set_ylabel("Entrenado en")
+    thr = M.max() * 0.6 if M.max() > 0 else 1
+    for i in range(len(nts)):
+        for j in range(len(nts)):
+            ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center",
+                    color="white" if M[i, j] > thr else "black", fontsize=10)
+    fig.colorbar(im, ax=ax, label="Error recon (px, media)")
+    ax.set_title(f"Robustez cruzada al ruido (test @ {level})", fontsize=11)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def plot_recon_vs_actual(grouped, out_path,
+                         title="Error reconstruido vs daño real de entrada (media)"):
+    fig, ax = plt.subplots(figsize=(7, 5))
+    cmap = plt.get_cmap("tab10")
+    maxv = 0.0
+    for i, (t, per_seed) in enumerate(grouped.items()):
+        noisy = np.array([d["noisy"] for d in per_seed]).mean(0)
+        recon = np.array([d["recon"] for d in per_seed]).mean(0)
+        ax.plot(noisy, recon, "o-", color=cmap(i % 10), label=t)
+        maxv = max(maxv, float(noisy.max()))
+    ax.plot([0, maxv], [0, maxv], "k--", alpha=0.5, label="sin denoising (y=x)")
+    ax.set_xlabel("Píxeles corrompidos en la entrada (media)")
+    ax.set_ylabel("Píxeles mal tras denoising (media)")
+    ax.set_title(title, fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def plot_fraction_removed(grouped, levels, out_path,
+                          title="Fracción de ruido eliminada (media ± desv.)"):
+    fig, ax = plt.subplots(figsize=(7, 5))
+    cmap = plt.get_cmap("tab10")
+    for i, (t, per_seed) in enumerate(grouped.items()):
+        noisy = np.array([d["noisy"] for d in per_seed])
+        recon = np.array([d["recon"] for d in per_seed])
+        with np.errstate(invalid="ignore", divide="ignore"):
+            frac = np.where(noisy > 1e-9, (noisy - recon) / noisy, np.nan)
+        m, s = np.nanmean(frac, axis=0), np.nanstd(frac, axis=0)
+        c = cmap(i % 10)
+        ax.plot(levels, m, "o-", color=c, label=t)
+        ax.fill_between(levels, m - s, m + s, color=c, alpha=0.15)
+    ax.set_xlabel("Noise level")
+    ax.set_ylabel("Fracción de ruido eliminada")
+    ax.set_ylim(0, 1.05)
+    ax.set_title(title, fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    plt.tight_layout()
     plt.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path

@@ -123,15 +123,29 @@ todas las seeds. Salidas en `output/compare_simple/`: `compare_loss.png`
 (bandas), `compare_metrics.png` (barras con barras de error), `compare_results.csv`
 (media ± desv. por variante).
 
-Comparar la robustez del denoising según el tipo de ruido
-(gaussian / salt_pepper / masking):
+Estudios del denoising con `compare_denoising.py` (el modo se elige por el
+config). Salidas bajo `output/denoising/`:
 
 ```bash
-python scripts/compare_denoising.py --config configs/default_denoising.json --workers 6
+# Tipos de ruido (default): curva por tipo + comparación "justa"
+python scripts/compare_denoising.py --config configs/default_denoising.json    --workers 6
+# Robustez cruzada: entrenar en un ruido, testear en otro (heatmap 3x3)
+python scripts/compare_denoising.py --config configs/denoising_crossrobust.json --workers 6
+# Panel cualitativo: limpio / ruidoso / reconstruido por tipo de ruido
+python scripts/compare_denoising.py --config configs/denoising_qualitative.json --workers 6
+# Por arquitectura: barrido del ancho del cuello de botella
+python scripts/compare_denoising.py --config configs/denoising_arch.json        --workers 6
+# Por nivel de ruido de entrenamiento (una figura por tipo)
+python scripts/compare_denoising.py --config configs/denoising_trainlevel.json  --workers 6
 ```
 
-Salidas en `output/denoising/noise_compare/`:
-`denoising_noise_comparison.png` (bandas por tipo), `denoising_noise_comparison.csv`.
+| Modo | Clave de config | Salida |
+|------|-----------------|--------|
+| tipos de ruido (default) | — | `noise_compare/denoising_noise_comparison.png`, `recon_vs_actual.png`, `fraction_removed.png` |
+| robustez cruzada | `cross_robustness` | `noise_compare/cross_robustness.png` |
+| panel cualitativo | `qualitative` (+ `qual_chars`, `qual_level`) | `noise_compare/noise_qualitative.png` |
+| arquitecturas | `arch_variants` | `arch_compare/denoising_arch_comparison.png` |
+| nivel de entrenamiento | `train_levels` | `trainlevel_compare/trainlevel_<tipo>.png` |
 
 ## Opciones de config relevantes
 
