@@ -5,6 +5,7 @@
 
     "layer_dims":       [35, 30, 15, 2, 15, 30, 35],
     "activation":       "tanh",
+    "weight_init":      "he",
     "optimizer":        "adam",
     "loss":             "bce",
     "seed":             0,
@@ -19,9 +20,10 @@
     "max_errors":       1,
 
     "variants": [
-        {"name": "adam deep",    "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 30, 15, 2, 15, 30, 35]},
-        {"name": "adam shallow", "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 16, 2, 16, 35]},
-        {"name": "adam bn3",     "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 30, 15, 3, 15, 30, 35]},
-        {"name": "sgd deep",     "optimizer": "sgd",  "lr": 0.05,  "layer_dims": [35, 30, 15, 2, 15, 30, 35]}
+        {"name": "adam deep he",     "optimizer": "adam", "lr": 0.001, "weight_init": "he",     "layer_dims": [35, 30, 15, 2, 15, 30, 35]},
+        {"name": "adam deep xavier", "optimizer": "adam", "lr": 0.001, "weight_init": "xavier", "layer_dims": [35, 30, 15, 2, 15, 30, 35]},
+        {"name": "adam shallow",     "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 16, 2, 16, 35]},
+        {"name": "adam bn3",         "optimizer": "adam", "lr": 0.001, "layer_dims": [35, 30, 15, 3, 15, 30, 35]},
+        {"name": "sgd deep",         "optimizer": "sgd",  "lr": 0.05,  "layer_dims": [35, 30, 15, 2, 15, 30, 35]}
     ]
 }

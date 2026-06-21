@@ -20,15 +20,16 @@ def _write_multiseed_csv(grouped, out_dir):
     with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow([
-            "variant", "n_seeds", "passed_mean", "passed_std",
+            "variant", "weight_init", "n_seeds", "passed_mean", "passed_std",
             "avg_err_mean", "avg_err_std", "final_loss_mean",
         ])
         for name, results in grouped.items():
             passed = [r.passed for r in results]
             avg_err = [r.avg_pixel_errors for r in results]
             final = [r.epoch_losses[-1] for r in results if r.epoch_losses]
+            init = results[0].params.get("weight_init", results[0].params.get("init", "he"))
             writer.writerow([
-                name, len(results),
+                name, init, len(results),
                 round(float(np.mean(passed)), 3), round(float(np.std(passed)), 3),
                 round(float(np.mean(avg_err)), 4), round(float(np.std(avg_err)), 4),
                 round(float(np.mean(final)), 6) if final else "",

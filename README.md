@@ -136,7 +136,8 @@ Salidas en `output/denoising/noise_compare/`:
 ## Opciones de config relevantes
 
 - `layer_dims`: arquitectura; el valor central es el cuello de botella.
-- `activation`, `optimizer` (`adam`/`sgd`), `lr`, `batch_size`, `epochs`, `seed`.
+- `activation`, `optimizer` (`adam`/`sgd`), `weight_init` (`"he"`/`"xavier"`),
+  `lr`, `batch_size`, `epochs`, `seed`.
 - `loss`: pérdida de salida del autoencoder (básico **y** denoising), `"mse"` o
   `"bce"`. Con la salida sigmoide, `bce` empuja los píxeles a 0/1 y logra
   reconstrucción sin error en el 100% de las seeds; `mse` solo en ~40% (algunas
