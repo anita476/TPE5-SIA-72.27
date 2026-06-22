@@ -1,7 +1,7 @@
 {
     "font":             "data/font.h",
     "autoencoder_type": "simple",
-    "out":              "output/simple_activation_compare",
+    "out":              "output/arquitecture_out_in",
 
     "layer_dims":       [35, 16, 2, 16, 35],
     "activation":       "tanh",
