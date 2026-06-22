@@ -21,7 +21,7 @@
 
 
     "variants": [
-        {"name": "Shallow Out-In - 0 intermediate",         "layer_dims": [35,2,35]},
+        {"name": "Shallow - 0 intermediate",         "layer_dims": [35,2,35]},
         {"name": "Classic Out-In - 1 intermediate",         "layer_dims": [35,16,2,16,35]},
         {"name": "Deep Out-In - 2 intermediate",     "layer_dims": [35,16,8,2,8,16,35]},
         {"name": "Deepest - 3 intermediate", "layer_dims": [35,16,8,4,2,4,8,16,35]}
