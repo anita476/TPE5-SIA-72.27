@@ -495,6 +495,32 @@ def plot_interpolation_seeds(models, X, labels, idx_a, idx_b, out_path,
     return out_path
 
 
+def plot_interpolation_single(ae, X, idx_a, idx_b, out_path,
+                              steps=9, threshold=0.5):
+    """Clean single-seed interpolation strip: one row of decoded glyphs with no
+    titles or labels, just the characters tightly packed (slide-ready)."""
+    alphas = np.linspace(0.0, 1.0, steps)
+    z = ae.encode(X)
+    za, zb = z[idx_a], z[idx_b]
+
+    fig, axes = plt.subplots(1, steps, figsize=(steps * 1.1, 1.5),
+                             squeeze=False)
+    for k, a in enumerate(alphas):
+        point = ((1 - a) * za + a * zb).reshape(1, -1).astype(np.float32)
+        glyph = (ae.decode(point)[0] >= threshold).astype(np.float32)
+        ax = axes[0, k]
+        ax.imshow(glyph.reshape(ROWS, COLS), cmap="gray_r", vmin=0, vmax=1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.6)
+
+    plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01, wspace=0.15)
+    plt.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
+
+
 def plot_generated_point_seeds(models, X, out_path, threshold=0.5):
     """One generated glyph (latent centroid) per seed, shown side by side."""
     n = len(models)

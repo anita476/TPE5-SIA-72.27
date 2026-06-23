@@ -35,6 +35,7 @@ paths inside the JSON configs resolve correctly (`scripts/_bootstrap.py` adds
 | `scripts/plot_dataset.py`         | Grid of the 32 input characters → `output/simple/dataset_grid.png`            |
 | `scripts/test_autoencoder.py`     | Train/evaluate the basic AE (multi-seed; `grid` section triggers grid search) |
 | `scripts/generate_letter.py`      | Generate new letters from the latent space (interpolation + centroid)         |
+| `scripts/seed_similarity.py`      | Cross-seed structural similarity of the 2-D latent space (RSA heatmap)        |
 | `scripts/denoising_experiment.py` | Train the DAE and study reconstruction vs noise level                         |
 | `scripts/compare_experiment.py`   | Compare AE architectures / optimisers (same budget)                           |
 | `scripts/compare_denoising.py`    | Compare noise types / DAE architectures (mode chosen by config)               |
@@ -59,7 +60,7 @@ paths inside the JSON configs resolve correctly (`scripts/_bootstrap.py` adds
 pip install -r requirements.txt
 ```
 
-Dependencies: `numpy`, `matplotlib`, `seaborn`, `pillow`, `scikit-learn`.
+Dependencies: `numpy`, `scipy`, `matplotlib`, `seaborn`, `pillow`, `scikit-learn`.
 Fashion-MNIST, Olivetti and CelebA are **downloaded automatically** on first use
 (Fashion-MNIST IDX files to `data/fashion/`, Olivetti via scikit-learn's cache,
 and a small CelebA subset from the public Hugging Face mirror). If a download
@@ -189,8 +190,35 @@ python scripts/generate_letter.py --config configs/default_simple.json --from c 
 | `--seeds`   | int  | `6`      | Fallback seed count `[1..N]` when the config has no `"seeds"` list |
 | `--workers` | int  | `1`      | Simultaneous runs                                                  |
 
-Outputs in `output/simple/`: `latent_interpolation_seeds.png` (one row per seed)
-and `latent_generated_point_seeds.png` (centroid decode, one per seed).
+Outputs in `output/simple/`: `latent_interpolation_seeds.png` (clean
+single-seed strip of the `from→to` morph, using the representative seed — the
+first one, matching `latent_single.png`), `latent_generated_point_seeds.png`
+(centroid decode, one per seed) and `latent_grid.png` (full latent-plane decode
+for the representative seed).
+
+### `scripts/seed_similarity.py`
+
+Quantifies how much of the 2-D latent **geometry** is shared across independent
+seeds (Representational Similarity Analysis). For each seed it builds the matrix
+of pairwise distances between characters — invariant to rotation, reflection,
+translation and scaling of the plane — then correlates those matrices between
+every pair of seeds. The mean off-diagonal correlation summarises the shared
+structure (≈0 = geometry dictated by the random init; >0 = partly dictated by
+the data).
+
+```bash
+python scripts/seed_similarity.py --config configs/chosen_model.json --workers 10
+```
+
+| Argument    | Type | Default        | Description                                          |
+| ----------- | ---- | -------------- | ---------------------------------------------------- |
+| `--config`  | str  | required       | Path to JSON config (must have a 2-D bottleneck)     |
+| `--seeds`   | int  | `10`           | Fallback seed count `[1..N]` when no `"seeds"` list  |
+| `--workers` | int  | `1`            | Simultaneous runs                                    |
+| `--out`     | str  | config's `out` | Output directory                                     |
+
+Outputs: `latent_seed_similarity.png` (N×N heatmap with the mean off-diagonal in
+the title) and `latent_seed_similarity.csv` (the matrix + the mean).
 
 ### `scripts/denoising_experiment.py`
 
@@ -411,12 +439,13 @@ reconstruction term (`"mse"` or `"bce"`); `log_every` sets the logging cadence.
 
 Every file under `configs/`, grouped by the script that consumes it.
 
-**Part 1 — basic AE** (`test_autoencoder.py`):
+**Part 1 — basic AE** (`test_autoencoder.py`, `generate_letter.py`, `seed_similarity.py`):
 
-| Config                    | Role                                        |
-| ------------------------- | ------------------------------------------- |
-| `default_simple.json`     | Default basic-AE run (BCE)                  |
-| `combination_simple.json` | `grid` section → hyperparameter grid search |
+| Config                    | Role                                                              |
+| ------------------------- | ---------------------------------------------------------------- |
+| `default_simple.json`     | Default basic-AE run (BCE)                                       |
+| `chosen_model.json`       | Final chosen architecture `[35,16,8,2,8,16,35]` (BCE, He, Adam) |
+| `combination_simple.json` | `grid` section → hyperparameter grid search                     |
 
 **Part 1 — AE comparison** (`compare_experiment.py`, `"variants"` configs):
 

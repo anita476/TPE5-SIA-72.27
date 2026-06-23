@@ -1,0 +1,21 @@
+{
+    "font":             "data/font.h",
+    "autoencoder_type": "simple",
+    "out":              "output/chosen_model",
+
+    "layer_dims":       [35, 16, 8, 2, 8, 16, 35],
+    "activation":       "tanh",
+    "weight_init":      "he",
+    "optimizer":        "adam",
+    "loss":             "bce",
+    "seed":             1,
+    "seeds":            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "epochs":           30000,
+    "patience":         8000,
+    "min_delta":        1e-7,
+    "lr":               0.001,
+    "batch_size":       4,
+    "log_every":        0,
+    "threshold":        0.5,
+    "max_errors":       0
+}

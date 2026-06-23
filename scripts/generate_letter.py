@@ -55,20 +55,24 @@ def main():
     idx_a = labels.index(args.src) if args.src in labels else 0
     idx_b = labels.index(args.dst) if args.dst in labels else len(labels) - 1
 
-    interp_path = multiseed.plot_interpolation_seeds(
-        models, X, labels, idx_a, idx_b,
+    # Representative seed: the first one, matching the single-seed latent-space
+    # plot (`latent_single.png`, which uses results[0]). The interpolation and
+    # the full-plane grid are single-model views, so both use this same seed.
+    rep_seed, rep_ae = models[0]
+
+    interp_path = multiseed.plot_interpolation_single(
+        rep_ae, X, idx_a, idx_b,
         os.path.join(out_dir, "latent_interpolation_seeds.png"),
         threshold=threshold)
-    print(f"Interpolation (seeds) -> {interp_path}")
+    print(f"Interpolation (seed {rep_seed}) -> {interp_path}")
 
     point_path = multiseed.plot_generated_point_seeds(
         models, X, os.path.join(out_dir, "latent_generated_point_seeds.png"),
         threshold=threshold)
     print(f"Generated point (seeds) -> {point_path}")
 
-    # Full-plane decoded grid for one representative seed (a single-model view:
+    # Full-plane decoded grid for the representative seed (a single-model view:
     # sweeping the latent plane can't be averaged across seeds).
-    rep_seed, rep_ae = models[0]
     grid_path = latent_grid(rep_ae, X, out_dir, threshold=threshold)
     print(f"Latent grid (seed {rep_seed}) -> {grid_path}")
 
