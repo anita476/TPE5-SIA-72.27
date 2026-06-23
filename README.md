@@ -1,180 +1,460 @@
 # TPE5-SIA-72.27
 
-Trabajo práctico 5 para Sistemas de Inteligencia Artificial: **Autoencoders**.
+Autoencoders. Fifth practical assignment for Sistemas de Inteligencia Artificial.
 
-Implementa, sobre las imágenes binarias de caracteres de `data/font.h` (32 caracteres de 7×5 = 35 píxeles):
+Everything is implemented from scratch with NumPy (manual forward/backprop,
+Adam/SGD, early stopping, best-model checkpoint, He/Xavier init). The assignment
+has two parts:
 
-- un **Autoencoder básico** con espacio latente de 2 dimensiones,
-- generación de **caracteres nuevos** a partir del espacio latente,
-- un **Denoising Autoencoder** y el estudio de su robustez al ruido.
+- **Part 1 — Autoencoder.** Basic AE with a 2-D latent space, generation of new
+  characters from the latent space, and a Denoising AE with a noise-robustness
+  study, all over the binary font characters in `data/font.h`.
+- **Part 2 — Variational Autoencoder (VAE).** A dense VAE (reparametrisation +
+  `recon + KL` loss, Kingma & Welling 2014) that **generates new images** by
+  sampling the prior `N(0, I)`, trained over four image datasets.
 
-## Requisitos
+## Autoencoder Types
+
+| Type          | Class                    | Description                                               | Implemented |
+| ------------- | ------------------------ | --------------------------------------------------------- | ----------- |
+| `simple`      | `SimpleAutoencoder`      | Basic encoder/decoder, MSE or BCE loss                    | yes         |
+| `denoising`   | `DenoisingAutoencoder`   | Corrupts the input, reconstructs the clean image          | yes         |
+| `variational` | `VariationalAutoencoder` | mu/logvar heads, reparametrisation, KL term; can generate | yes         |
+
+## Entry points
+
+Run every command from the **repository root** so that the `font`/`out`/`data`
+paths inside the JSON configs resolve correctly (`scripts/_bootstrap.py` adds
+`src/` to the path and anchors relative paths to the root).
+
+### Part 1 — Autoencoder
+
+| Script                            | Purpose                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `scripts/main.py`                 | Quick demo: small AE on `data/font.h`, prints reconstructions                 |
+| `scripts/plot_dataset.py`         | Grid of the 32 input characters → `output/simple/dataset_grid.png`            |
+| `scripts/test_autoencoder.py`     | Train/evaluate the basic AE (multi-seed; `grid` section triggers grid search) |
+| `scripts/generate_letter.py`      | Generate new letters from the latent space (interpolation + centroid)         |
+| `scripts/denoising_experiment.py` | Train the DAE and study reconstruction vs noise level                         |
+| `scripts/compare_experiment.py`   | Compare AE architectures / optimisers (same budget)                           |
+| `scripts/compare_denoising.py`    | Compare noise types / DAE architectures (mode chosen by config)               |
+| `scripts/arch_zoom_plots.py`      | Redraw the DAE comparisons with a low-noise zoom inset (no retraining)        |
+
+### Part 2 — VAE
+
+| Script                            | Purpose                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `scripts/train_vae.py`            | Architecture sweep (latent / depth / lr), multi-seed, + plain-AE comparison |
+| `scripts/generate_vae.py`         | Generate from a trained VAE: prior samples, latent traversals, latent grid  |
+| `scripts/olivetti_vae.py`         | Single-run VAE on Olivetti faces: train once, emit all plots                |
+| `scripts/ae_vs_vae_generation.py` | AE vs VAE on emojis: why a plain AE cannot generate                         |
+| `scripts/ae_vs_vae_fashion.py`    | Same argument on Fashion-MNIST                                              |
+| `scripts/compare_vae_configs.py`  | BCE vs MSE and ReLU+He vs tanh+Xavier                                       |
+
+---
+
+## Requirements
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Estructura
+Dependencies: `numpy`, `matplotlib`, `seaborn`, `pillow`, `scikit-learn`.
+Fashion-MNIST, Olivetti and CelebA are **downloaded automatically** on first use
+(Fashion-MNIST IDX files to `data/fashion/`, Olivetti via scikit-learn's cache,
+and a small CelebA subset from the public Hugging Face mirror). If a download
+fails, the loaders print where to drop the files manually.
 
-```
-configs/                      configs JSON de cada experimento
-data/font.h                   dataset de caracteres (7x5)
-output/                       resultados (plots, CSV, reconstrucciones)
-scripts/                      entry points ejecutables
-  _bootstrap.py               agrega src/ al path y resuelve rutas a la raíz
-  main.py                     demo rápida
-  plot_dataset.py             grilla de los 32 caracteres de entrada
-  test_autoencoder.py         entrenar/evaluar (multi-seed; grid opcional)
-  generate_letter.py          generar letras nuevas (por seed)
-  denoising_experiment.py     entrenar DAE + estudio de ruido (multi-seed)
-  compare_experiment.py       comparar arquitecturas/optimizadores (multi-seed)
-  compare_denoising.py        comparar tipos de ruido (multi-seed)
-src/                          librería (paquetes importables)
-  autoencoders/
-    Autoencoder.py            clase base (entrenamiento, Adam/SGD,
-                              early stopping, restauración del mejor modelo)
-    SimpleAutoencoder.py      autoencoder básico (forward/backprop)
-    DenoisingAutoencoder.py   variante denoising (corrompe la entrada)
-  utils/
-    font_loader.py            parser de font.h
-    config_loader.py          carga/validación de configs + grid
-    grid_runner.py            grid search paralelo + plots + CSV
-    single_run.py             una corrida de entrenamiento/evaluación
-    multiseed.py              corre N seeds y agrega media ± desv. + plots
-    plot_style.py             estilo de gráficos compartido del TP
-    noise.py                  ruido: gaussian / salt_pepper / masking
-    denoising_eval.py         estudio de denoising por nivel de ruido
-    latent_generate.py        generación desde el espacio latente
-    comparison.py             estudio comparativo de variantes (multi-seed)
-```
+---
 
-## Multi-seed por defecto
+## Data format
 
-Todos los scripts de la consigna corren sobre **varias semillas** y reportan
-**media ± desviación**, para que cualquier afirmación se base en una muestra y
-no en una corrida afortunada. Las semillas se definen en el config como lista
-explícita, p.ej. `"seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]`. La cantidad de
-corridas **simultáneas** se elige con `--workers N` (default `1`, portable; no
-está atada a la cantidad de CPUs de la máquina). Si el config no trae `"seeds"`,
-se usa `--seeds N` como fallback generando `[1..N]`.
+### Font characters (`data/font.h`)
 
-## Uso
+32 characters, each a 7×5 = 35-pixel binary bitmap stored as C row bitmasks
+(MSB = leftmost column). Loaded by `utils/font_loader.py` into a `(32, 35)`
+float array in `{0, 1}`. This is the Part 1 dataset.
 
-Los comandos se corren desde la **raíz del proyecto**. Las rutas de `font` y
-`out` de los configs se resuelven respecto de la raíz, así que las salidas
-siempre van a `output/`.
+### Emojis (`data/emojis.h`)
 
-### Dataset (grilla de los 32 caracteres)
+48 emoji glyphs at 20×20, each stored both as a B&W row bitmask and as a
+`0xRRGGBB` colour grid. `utils/emoji_loader.py` returns a 400-dim B&W vector and
+a 1200-dim (20×20×3) colour vector per emoji. The file is generated from system
+emoji fonts by `utils/emoji_to_h.py`.
 
-```bash
-python scripts/plot_dataset.py
-```
+### Fashion-MNIST / Olivetti / CelebA (auto-download)
 
-Salida: `output/simple/dataset_grid.png`.
+| Dataset        | Loader                          | Shape                         | Notes                                                    |
+| -------------- | ------------------------------- | ----------------------------- | -------------------------------------------------------- |
+| Fashion-MNIST  | `utils/fashion_mnist_loader.py` | 28×28 = 784-dim, 10 classes   | IDX `.gz` in `data/fashion/`, subsampled (`--n-samples`) |
+| Olivetti faces | `utils/olivetti_loader.py`      | 64×64 = 4096-dim, 40 subjects | 400 images via scikit-learn                              |
+| CelebA         | `utils/celeba_loader.py`        | 40×40 grayscale = 1600-dim    | subset fetched from a Hugging Face mirror                |
 
-### 1a) Autoencoder básico (latente 2D, ≤1 píxel de error)
+All loaders return `float32` arrays in `[0, 1]` flattened to the shape the rest
+of the pipeline expects.
+
+---
+
+## Conventions
+
+**Multi-seed by default (Part 1 and the VAE sweeps).** Scripts run over **several
+seeds** and report **mean ± std**, so claims rest on a sample rather than a lucky
+run. Seeds are an explicit list in the config, e.g.
+`"seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]`. The number of **simultaneous** runs
+is set with `--workers N` (default `1`, portable; not tied to the host CPU
+count). If the config has no `"seeds"`, `--seeds N` is used as a fallback,
+generating `[1..N]`.
+
+---
+
+## Library (`src/`)
+
+Importable packages used by the scripts above.
+
+**`src/autoencoders/`**
+
+| Module                      | Contents                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `Autoencoder.py`            | Base class: training loop, Adam/SGD, early stopping, best-model checkpoint, He/Xavier init |
+| `SimpleAutoencoder.py`      | Basic autoencoder (forward/backprop)                                                       |
+| `DenoisingAutoencoder.py`   | Denoising variant (corrupts the input)                                                     |
+| `VariationalAutoencoder.py` | Dense VAE: mu/logvar heads, reparametrisation, KL term                                     |
+
+**`src/utils/`**
+
+| Module                    | Contents                                                 |
+| ------------------------- | -------------------------------------------------------- |
+| `activations.py`          | Activation functions and their gradients                 |
+| `font_loader.py`          | Parser for `data/font.h`                                 |
+| `emoji_loader.py`         | Parser for `data/emojis.h` (B&W + color)                 |
+| `emoji_to_h.py`           | Generates `emojis.h` by rendering glyphs with PIL        |
+| `fashion_mnist_loader.py` | Fashion-MNIST loader (IDX, auto-download)                |
+| `olivetti_loader.py`      | Olivetti loader (via scikit-learn)                       |
+| `celeba_loader.py`        | CelebA loader (auto-download from a HF mirror)           |
+| `config_loader.py`        | Config loading/validation + grid expansion               |
+| `grid_runner.py`          | Parallel grid search + plots + CSV                       |
+| `single_run.py`           | One training/evaluation run                              |
+| `multiseed.py`            | Runs N seeds and aggregates mean ± std + plots           |
+| `comparison.py`           | Comparative study of variants (multi-seed)               |
+| `noise.py`                | Noise generators: `gaussian` / `salt_pepper` / `masking` |
+| `denoising_eval.py`       | Denoising study per noise level                          |
+| `latent_generate.py`      | Generation from the latent space (Part 1)                |
+| `plot_style.py`           | Shared plot style for the TP                             |
+| `emoji_grid.py`           | Grid of all emojis in `emojis.h`                         |
+| `fashion_mnist_grid.py`   | Grid of Fashion-MNIST samples                            |
+| `olivetti_grid.py`        | Grid of the 400 Olivetti faces                           |
+
+---
+
+## Part 1 — Autoencoder
+
+### `scripts/test_autoencoder.py`
+
+Trains and evaluates the basic AE over the config's seeds, aggregating mean ±
+std. A multi-combination `"grid"` section (see `configs/combination_simple.json`)
+switches to a classic hyperparameter grid search instead.
 
 ```bash
 python scripts/test_autoencoder.py --config configs/default_simple.json --workers 8
 ```
 
-Entrena el AE sobre las seeds del config y agrega media ± desv. Salidas en
-`output/simple/`: `loss.png` (banda media±desv.), `errors.png` (error por
-carácter con desvío), `latent_seeds.png` (espacio latente 2D por seed),
-`summary.csv` (passed y error por seed + resumen).
+| Argument        | Type | Default        | Description                                                                      |
+| --------------- | ---- | -------------- | -------------------------------------------------------------------------------- |
+| `--config`      | str  | `None`         | Path to a JSON config. A multi-combination `"grid"` section triggers grid search |
+| `--seeds`       | int  | `10`           | Fallback seed count `[1..N]` when the config has no `"seeds"` list               |
+| `--workers`     | int  | `1`            | Simultaneous runs (1 = sequential)                                               |
+| `--latent-show` | int  | `6`            | How many seeds to display in the latent-space grid                               |
+| `--font`        | str  | `data/font.h`  | Path to the font bitmap file                                                     |
+| `--out`         | str  | config's `out` | Output directory                                                                 |
 
-El config también admite una sección `"grid"` (ver
-`configs/combination_simple.json`): si tiene más de una combinación, se corre
-el grid search clásico de hiperparámetros (un set de plots por corrida).
+Outputs in `output/simple/`: `loss.png` (mean±std band), `errors.png` (per-char
+error with std), `latent_seeds.png` (2-D latent space per seed), `summary.csv`
+(passed + error per seed plus summary).
 
-### 1a-4) Generar una letra nueva desde el espacio latente
+### `scripts/generate_letter.py`
+
+Generates new letters from the latent space: an interpolation between two
+characters (intermediate steps are letters that do not exist in the dataset) and
+a character decoded from the latent centroid.
 
 ```bash
 python scripts/generate_letter.py --config configs/default_simple.json --from c --to e --workers 6
 ```
 
-Salidas en `output/simple/`: `latent_interpolation_seeds.png` (interpolación
-entre dos caracteres, una fila por seed; los pasos intermedios son letras
-inexistentes en el dataset) y `latent_generated_point_seeds.png` (carácter
-generado desde el centroide del latente, uno por seed).
+| Argument    | Type | Default  | Description                                                        |
+| ----------- | ---- | -------- | ------------------------------------------------------------------ |
+| `--config`  | str  | required | Path to JSON config                                                |
+| `--from`    | str  | `c`      | Source character                                                   |
+| `--to`      | str  | `e`      | Target character                                                   |
+| `--seeds`   | int  | `6`      | Fallback seed count `[1..N]` when the config has no `"seeds"` list |
+| `--workers` | int  | `1`      | Simultaneous runs                                                  |
 
-### 1b) Denoising Autoencoder
+Outputs in `output/simple/`: `latent_interpolation_seeds.png` (one row per seed)
+and `latent_generated_point_seeds.png` (centroid decode, one per seed).
+
+### `scripts/denoising_experiment.py`
+
+Trains the DAE by corrupting the input (target = clean image) and evaluates
+reconstruction at several noise levels, aggregating mean ± std over seeds.
 
 ```bash
 python scripts/denoising_experiment.py --config configs/default_denoising.json --workers 8
 ```
 
-Entrena corrompiendo la entrada (objetivo = imagen limpia) y evalúa la
-reconstrucción a distintos niveles de ruido, agregando media ± desv. sobre las
-seeds. Salidas en `output/denoising/`: `denoising_vs_noise.png` (banda),
-`loss.png` y `denoising_examples_<nivel>.png` (seed representativa),
-`denoising_metrics.csv`.
+| Argument    | Type | Default  | Description                  |
+| ----------- | ---- | -------- | ---------------------------- |
+| `--config`  | str  | required | Path to JSON config          |
+| `--seeds`   | int  | `10`     | Fallback seed count `[1..N]` |
+| `--workers` | int  | `1`      | Simultaneous runs            |
 
-### Estudios comparativos
+Outputs in `output/denoising/`: `denoising_vs_noise.png` (band), `loss.png`,
+`denoising_examples_<level>.png` (representative seed), `denoising_metrics.csv`.
 
-Comparar arquitecturas / optimizadores del autoencoder básico (mismo presupuesto):
+### `scripts/compare_experiment.py`
+
+Compares AE architectures / optimisers under the same budget. Variants are
+defined in the config's `"variants"` key; each is trained over all seeds.
 
 ```bash
 python scripts/compare_experiment.py --config configs/compare_simple.json --workers 6
 ```
 
-Define variantes en la clave `"variants"` del config; cada una se entrena sobre
-todas las seeds. Salidas en `output/compare_simple/`: `compare_loss.png`
-(bandas), `compare_metrics.png` (barras con barras de error), `compare_results.csv`
-(media ± desv. por variante).
+| Argument        | Type | Default  | Description                                        |
+| --------------- | ---- | -------- | -------------------------------------------------- |
+| `--config`      | str  | required | Path to JSON config (with a `"variants"` list)     |
+| `--seeds`       | int  | `10`     | Fallback seed count `[1..N]`                       |
+| `--workers`     | int  | `1`      | Simultaneous runs                                  |
+| `--latent-show` | int  | `6`      | How many seeds to display in the latent-space grid |
 
-Estudios del denoising con `compare_denoising.py` (el modo se elige por el
-config). Salidas bajo `output/denoising/`:
+Outputs in `output/compare_simple/`: `compare_loss.png` (bands),
+`compare_metrics.png` (bars with error bars), `compare_results.csv` (mean ± std
+per variant). Related configs: `simple_optimization_compare.json`,
+`simple_activation_compare.json`, `compare_init.json`,
+`simple_arquitecture_compare_in_out.json`, …
+
+### `scripts/compare_denoising.py`
+
+Comparative DAE studies; the **mode is selected by the config**.
 
 ```bash
-# Tipos de ruido (default): curva por tipo + comparación "justa"
-python scripts/compare_denoising.py --config configs/default_denoising.json    --workers 6
-# Robustez cruzada: entrenar en un ruido, testear en otro (heatmap 3x3)
-python scripts/compare_denoising.py --config configs/denoising_crossrobust.json --workers 6
-# Panel cualitativo: limpio / ruidoso / reconstruido por tipo de ruido
-python scripts/compare_denoising.py --config configs/denoising_qualitative.json --workers 6
-# Por arquitectura: barrido del ancho del cuello de botella
-python scripts/compare_denoising.py --config configs/denoising_arch.json        --workers 6
-# Por nivel de ruido de entrenamiento (una figura por tipo)
-python scripts/compare_denoising.py --config configs/denoising_trainlevel.json  --workers 6
+python scripts/compare_denoising.py --config configs/default_denoising.json --workers 6
 ```
 
-| Modo | Clave de config | Salida |
-|------|-----------------|--------|
-| tipos de ruido (default) | — | `noise_compare/denoising_noise_comparison.png`, `recon_vs_actual.png`, `fraction_removed.png` |
-| robustez cruzada | `cross_robustness` | `noise_compare/cross_robustness.png` |
-| panel cualitativo | `qualitative` (+ `qual_chars`, `qual_level`) | `noise_compare/noise_qualitative.png` |
-| arquitecturas | `arch_variants` | `arch_compare/denoising_arch_comparison.png` |
-| nivel de entrenamiento | `train_levels` | `trainlevel_compare/trainlevel_<tipo>.png` |
+| Argument    | Type | Default  | Description                                    |
+| ----------- | ---- | -------- | ---------------------------------------------- |
+| `--config`  | str  | required | Path to JSON config (its keys select the mode) |
+| `--seeds`   | int  | `10`     | Fallback seed count `[1..N]`                   |
+| `--workers` | int  | `1`      | Simultaneous runs                              |
 
-## Opciones de config relevantes
+| Mode                  | Config key                                   | Output (under `output/denoising/`)                                                            |
+| --------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| noise types (default) | —                                            | `noise_compare/denoising_noise_comparison.png`, `recon_vs_actual.png`, `fraction_removed.png` |
+| cross-robustness      | `cross_robustness`                           | `noise_compare/cross_robustness.png` (train-on-X, test-on-Y 3×3 heatmap)                      |
+| qualitative panel     | `qualitative` (+ `qual_chars`, `qual_level`) | `noise_compare/noise_qualitative.png`                                                         |
+| architectures         | `arch_variants`                              | `arch_compare/denoising_arch_comparison.png`                                                  |
+| training level        | `train_levels`                               | `trainlevel_compare/trainlevel_<type>.png`                                                    |
 
-- `layer_dims`: arquitectura; el valor central es el cuello de botella.
+Configs: `denoising_crossrobust.json`, `denoising_qualitative.json`,
+`denoising_arch.json`, `denoising_trainlevel.json`, plus the per-axis sweeps
+`denoising_hidden.json`, `denoising_depth.json`, `denoising_activation.json`,
+`denoising_batch.json`, `denoising_lr.json`, `denoising_init.json`,
+`denoising_simplearch.json`.
+
+### `scripts/arch_zoom_plots.py`
+
+Redraws the DAE architecture comparisons (latent / hidden width / depth /
+activation / batch / lr / training level) adding a **zoom inset** over the
+low-noise region where the curves separate. Reads the already-generated CSVs — it
+does **not** retrain.
+
+```bash
+python scripts/arch_zoom_plots.py
+python scripts/arch_zoom_plots.py --zoom 0.25
+```
+
+| Argument | Type  | Default | Description                                                 |
+| -------- | ----- | ------- | ----------------------------------------------------------- |
+| `--zoom` | float | `0.2`   | Upper bound of the low-noise zoom inset (x-range `0..zoom`) |
+
+### `scripts/plot_dataset.py`
+
+No arguments. Renders the grid of the 32 input characters.
+
+```bash
+python scripts/plot_dataset.py   # → output/simple/dataset_grid.png
+```
+
+---
+
+## Part 2 — VAE
+
+The VAE generates **new images** by sampling the prior `N(0, I)` and decoding.
+The network layout is given in `layer_dims` with the bottleneck (latent
+dimension) in the centre, e.g. `[400, 128, 2, 128, 400]`. Outputs carry a
+dataset prefix: `""` (emoji B&W), `color_`, `fashion_`, `olivetti_`, `celeba_`.
+
+### `scripts/train_vae.py`
+
+Runs up to three sweeps over all seeds, then trains a plain AE with the best 2-D
+config and compares the two latent spaces side by side. Per-config outputs (loss
+curves, reconstructions, **KL-per-dim** to reveal posterior collapse, and the
+latent scatter when 2-D) go to `output/<prefix>vae_configs/<arch>/`.
+
+```bash
+python scripts/train_vae.py --config configs/vae_sweep.json                 # emoji B&W (default)
+python scripts/train_vae.py --color --config configs/vae_sweep_color.json   # emoji color (1200-dim)
+python scripts/train_vae.py --dataset fashion  --config configs/vae_sweep_fashion.json
+python scripts/train_vae.py --dataset olivetti --config configs/vae_sweep_olivetti.json
+python scripts/train_vae.py --dataset celeba   --config configs/vae_sweep_celeba.json
+```
+
+| Argument      | Type | Default             | Description                                                            |
+| ------------- | ---- | ------------------- | ---------------------------------------------------------------------- |
+| `--config`    | str  | per-dataset default | Path to the sweep config JSON                                          |
+| `--dataset`   | str  | `emoji`             | `emoji` / `fashion` / `olivetti` / `celeba`                            |
+| `--color`     | flag | off                 | Train on color RGB (1200-dim) instead of B&W (400-dim) — emoji only    |
+| `--n-samples` | int  | `None`              | Number of samples to load (fashion/celeba only)                        |
+| `--sweep`     | str  | `all`               | `all` (latent+arch+lr+AE comparison), or only `latent` / `arch` / `lr` |
+
+Sweeps (config sections): **A** `latent_dim_sweep` (MSE vs L, plus the dual-axis
+MSE↓/KL↑ tradeoff plot), **B** `arch_sweep` (MSE vs depth/width at latent=2),
+**C** `lr_sweep` (MSE vs lr, log x; optional). Global outputs:
+`output/<prefix>vae_latent_dim_sweep.png`, `..._arch_sweep.png`,
+`..._vae_arch_tuning_table.txt`, `..._best_vae_config.json`.
+
+### `scripts/generate_vae.py`
+
+Generates from a trained VAE. Run **after** `train_vae.py` — it reuses the
+`<prefix>best_vae_config.json` it saved (falling back to sensible per-dataset
+defaults if absent).
+
+```bash
+python scripts/generate_vae.py --dataset emoji      # or fashion / olivetti / celeba (+ --color)
+```
+
+| Argument      | Type | Default | Description                                     |
+| ------------- | ---- | ------- | ----------------------------------------------- |
+| `--dataset`   | str  | `emoji` | `emoji` / `fashion` / `olivetti` / `celeba`     |
+| `--color`     | flag | off     | Use color (RGB 1200-dim) mode — emoji only      |
+| `--n-samples` | int  | `None`  | Number of samples to load (fashion/celeba only) |
+
+Outputs (prefixed): `vae_prior_samples.png` (+ binarised B&W version + a map of
+where samples land in the 2-D latent), `vae_traversal_annotated_*.png`
+(interpolations with the path drawn over the latent space), `vae_latent_grid.png`
+(decoded grid; for L>2 it sweeps the two highest-KL dims), and a class/subject
+scatter for the non-emoji datasets.
+
+### `scripts/compare_vae_configs.py`
+
+Trains 4 VAE configs (same architecture and seed): BCE/MSE × {ReLU+He,
+tanh+Xavier}.
+
+```bash
+python scripts/compare_vae_configs.py --dataset emoji    # or --dataset fashion
+```
+
+| Argument      | Type | Default | Description                              |
+| ------------- | ---- | ------- | ---------------------------------------- |
+| `--dataset`   | str  | `emoji` | `emoji` or `fashion`                     |
+| `--n-samples` | int  | `None`  | Number of samples to load (fashion only) |
+
+Per-config outputs in `output/vae_compare_<dataset>/<name>/` (loss curves,
+reconstructions, latent scatter, latent grid) plus a bar-chart summary and a text
+table in `output/`.
+
+### `scripts/olivetti_vae.py`, `ae_vs_vae_generation.py`, `ae_vs_vae_fashion.py`
+
+No arguments — tunables live at the top of each file.
+
+```bash
+python scripts/olivetti_vae.py            # single-run Olivetti VAE, all plots (olivetti_ prefix)
+python scripts/ae_vs_vae_generation.py    # AE vs VAE on emojis (ae_vs_vae_ prefix)
+python scripts/ae_vs_vae_fashion.py       # AE vs VAE on Fashion-MNIST (fashion_ae_vs_vae_ prefix)
+```
+
+The two `ae_vs_vae_*` scripts train an AE and a VAE with the **same
+architecture** and contrast them: the two latent spaces, decoded random `z` (AE
+→ noise, VAE → recognisable images), and a decoded latent grid (AE has
+meaningless gaps, VAE morphs smoothly).
+
+---
+
+## Config options
+
+**Common (AE and VAE).**
+
+- `layer_dims`: architecture; the central value is the bottleneck (= latent dim).
 - `activation`, `optimizer` (`adam`/`sgd`), `weight_init` (`"he"`/`"xavier"`),
   `lr`, `batch_size`, `epochs`, `seed`.
-- `loss`: pérdida de salida del autoencoder (básico **y** denoising), `"mse"` o
-  `"bce"`. Con la salida sigmoide, `bce` empuja los píxeles a 0/1 y logra
-  reconstrucción sin error en el 100% de las seeds; `mse` solo en ~40% (algunas
-  letras quedan con píxeles borderline). Tanto la curva de loss como el
-  best-model checkpoint usan la pérdida elegida. Default: `bce` en
-  `default_simple.json`, `mse` en `default_denoising.json`.
-- `seeds`: lista de semillas para el estudio multi-seed, p.ej. `[1, 2, …, 10]`.
-- `patience` / `min_delta`: early stopping (omitir `patience` lo desactiva).
-- `threshold`, `max_errors`: binarización y tolerancia de píxeles.
-- Denoising: `noise_type` (`gaussian`/`salt_pepper`/`masking`),
-  `noise_level` (ruido de entrenamiento) y `noise_levels` (niveles a evaluar).
+- `patience` / `min_delta`: early stopping (omit `patience` to disable).
+- `seeds`: list of seeds for the multi-seed study, e.g. `[1, 2, …, 10]`.
 
-CLI común: `--workers N` (corridas simultáneas) y `--seeds N` (fallback si el
-config no define `"seeds"`).
+**Part 1 (basic AE and denoising).**
 
-## Estado
+- `loss`: output loss, `"mse"` or `"bce"`. With the sigmoid output, `bce` pushes
+  pixels to 0/1 and reaches error-free reconstruction on 100% of seeds; `mse`
+  only ~40% (some letters keep borderline pixels). Both the loss curve and the
+  best-model checkpoint use the chosen loss. Default: `bce` in
+  `default_simple.json`, `mse` in `default_denoising.json`.
+- `threshold`, `max_errors`: binarisation and pixel tolerance.
+- Denoising: `noise_type` (`gaussian`/`salt_pepper`/`masking`), `noise_level`
+  (training noise) and `noise_levels` (levels to evaluate).
 
-- [x] grid support for config
-- [x] parallel workers (selectable, config-driven seeds)
-- [x] multi-seed aggregation (mean ± std) in every consigna script
-- [x] csv output of epoch loss
-- [x] early stopping for unchanging loss
-- [x] best-model checkpoint (restore lowest-loss weights)
-- [x] analyse latent space + generate new image from simple autoencoder
-- [x] denoising + noise-type comparison
-- [ ] maybe add softmax for threshold analysis
+**Part 2 (VAE).** Sweep configs have `shared` (common hyperparameters), `seeds`,
+and one or more of `latent_dim_sweep` / `arch_sweep` / `lr_sweep`, each with a
+`configs` list of `layer_dims` overrides. `recon_loss` is the ELBO
+reconstruction term (`"mse"` or `"bce"`); `log_every` sets the logging cadence.
+
+---
+
+## Config index
+
+Every file under `configs/`, grouped by the script that consumes it.
+
+**Part 1 — basic AE** (`test_autoencoder.py`):
+
+| Config                    | Role                                        |
+| ------------------------- | ------------------------------------------- |
+| `default_simple.json`     | Default basic-AE run (BCE)                  |
+| `combination_simple.json` | `grid` section → hyperparameter grid search |
+
+**Part 1 — AE comparison** (`compare_experiment.py`, `"variants"` configs):
+
+| Config                                    | Compares                                    |
+| ----------------------------------------- | ------------------------------------------- |
+| `compare_simple.json`                     | Reference architecture/optimiser comparison |
+| `compare_init.json`                       | Weight initialisers                         |
+| `simple_optimization_compare.json`        | Optimisers (Adam vs SGD)                    |
+| `simple_activation_compare.json`          | Activations (tanh vs logistic)              |
+| `simple_activation_compare_full.json`     | Activations, longer schedule (MSE)          |
+| `simple_activation_compare_full_bce.json` | Activations, longer schedule (BCE)          |
+| `simple_bce.json`                         | BCE-loss variant set                        |
+| `simple_arquitecture_compare_in_out.json` | Architecture, encoder→bottleneck taper      |
+| `simple_arquitecture_compare_out_in.json` | Architecture, bottleneck→decoder taper      |
+
+**Part 1 — denoising** (`denoising_experiment.py` / `compare_denoising.py`):
+
+| Config                       | Role                                        |
+| ---------------------------- | ------------------------------------------- |
+| `default_denoising.json`     | Default DAE run / noise-types comparison    |
+| `denoising_crossrobust.json` | Cross-robustness (train-on-X, test-on-Y)    |
+| `denoising_qualitative.json` | Qualitative clean/noisy/reconstructed panel |
+| `denoising_arch.json`        | Bottleneck-width sweep                      |
+| `denoising_hidden.json`      | Hidden-layer width sweep                    |
+| `denoising_depth.json`       | Depth sweep                                 |
+| `denoising_activation.json`  | Activation sweep                            |
+| `denoising_batch.json`       | Batch-size sweep                            |
+| `denoising_lr.json`          | Learning-rate sweep                         |
+| `denoising_init.json`        | Weight-init sweep                           |
+| `denoising_simplearch.json`  | Minimal-architecture variant                |
+| `denoising_trainlevel.json`  | Training-noise-level sweep                  |
+
+**Part 2 — VAE** (`train_vae.py`):
+
+| Config                    | Dataset                 |
+| ------------------------- | ----------------------- |
+| `vae_sweep.json`          | Emoji (B&W, 400-dim)    |
+| `vae_sweep_color.json`    | Emoji (color, 1200-dim) |
+| `vae_sweep_fashion.json`  | Fashion-MNIST           |
+| `vae_sweep_olivetti.json` | Olivetti faces          |
+| `vae_sweep_celeba.json`   | CelebA                  |
